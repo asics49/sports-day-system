@@ -33,7 +33,7 @@ h1, h2, h3 { line-height: 1.3; }
 .banner {
   position: relative;
   width: 100%;
-  height: clamp(150px, 26vw, 380px);   /* 滿版寬度，高度隨螢幕縮放 */
+  aspect-ratio: 2000 / 600;            /* 滿版寬度，高度依比例完整顯示、不裁切 */
   background: #fff url("../assets/banner.jpg") center/cover no-repeat;
 }
 .banner-text {
