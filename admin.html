@@ -53,11 +53,12 @@
 
     <!-- 匯入報名 -->
     <section class="card panel" style="display:none">
-      <h2>Excel 匯入報名</h2>
-      <p class="muted">格式：每一列一筆報名，欄位順序 <b>年級｜班級｜座號｜姓名｜性別｜項目名稱</b>（第一列為標題）。
-        系統會逐位學生檢查個人單項數，<b>超過 <span id="maxTip">2</span> 項（報到第 3 項）者會標紅、不匯入</b>。</p>
+      <h2>Excel 匯入報名（格子勾選式）</h2>
+      <p class="muted">請先按「下載範例格式」，裡面有 <b>4、5、6 年級各一個工作表</b>，項目（男生60公尺、女生60公尺…）已排成欄位標題。</p>
+      <p class="muted">各班填法：<b>一位選手一列</b>，填「班別／座號／姓名」，再在他報名的項目欄位打「<b>V</b>」(或任何符號)。
+        系統匯入時自動判別，並檢查 <b>每人最多 <span id="maxTip">2</span> 項</b>（超過標紅不匯入）、<b>每項每班最多 2 人</b>（超過標黃提醒）。</p>
       <div class="row">
-        <button class="btn ghost" id="r_tpl" type="button">下載範例格式</button>
+        <button class="btn ghost" id="r_tpl" type="button">下載範例格式（4/5/6年級）</button>
         <input type="file" id="r_file" accept=".xlsx,.xls,.csv" style="max-width:320px">
       </div>
       <div id="r_preview" style="margin-top:12px"></div>
@@ -138,61 +139,87 @@
       catch(e){ toast(e.message,"err"); }
     };
 
-    /* ---- 匯入報名 ---- */
-    function normGrade(g){ g=String(g).trim(); return /年級/.test(g)?g:(g?g+"年級":""); }
-    function findEventByName(name, grade, sex){
-      name=String(name).trim(); grade=normGrade(grade); sex=String(sex).trim();
-      const m = EVENTS.filter(e => String(e["名稱"]).trim()===name
-        && (String(e["組別"])===grade || String(e["組別"])==="全校")
-        && (String(e["性別"])===sex || String(e["性別"])==="混合"));
-      return m.length===1 ? m[0] : null;
+    /* ---- 匯入報名（格子勾選式，4/5/6年級各一工作表） ---- */
+    let EVENT_OVER = [];
+    function sheetGrade(name){ const m=String(name).match(/[456]/); return m ? m[0]+"年級" : ""; }
+    function headerToEvent(header, grade){
+      header=String(header).trim(); let sex="", name=header;
+      if(header.indexOf("男生")===0){ sex="男"; name=header.slice(2); }
+      else if(header.indexOf("女生")===0){ sex="女"; name=header.slice(2); }
+      else return null;                       // 只認「男生/女生+項目」的欄位
+      name=name.trim();
+      const m=EVENTS.filter(e=>String(e["組別"])===grade && String(e["名稱"])===name && String(e["性別"])===sex);
+      return m.length ? m[0] : null;
+    }
+    function readAllSheets(file){
+      return new Promise(function(resolve,reject){
+        const fr=new FileReader();
+        fr.onload=function(e){ try{
+          const wb=XLSX.read(e.target.result,{type:"array"});
+          resolve(wb.SheetNames.map(n=>({name:n, rows:XLSX.utils.sheet_to_json(wb.Sheets[n],{defval:""})})));
+        }catch(err){reject(err);} };
+        fr.onerror=reject; fr.readAsArrayBuffer(file);
+      });
     }
     async function onRegFile(ev){
       const f=ev.target.files[0]; if(!f) return;
-      const rows = await readSheetFile(f);   // 陣列，每列物件（依標題）
-      // 分組成學生
-      const map={};
-      const order=[];
-      rows.forEach(function(r){
-        const 年級=r["年級"], 班級=r["班級"], 座號=r["座號"], 姓名=r["姓名"], 性別=r["性別"], 項目=r["項目名稱"]||r["項目"];
-        if(!年級||!班級||!座號||!項目) return;
-        const key=年級+"|"+班級+"|"+座號;
-        if(!map[key]){ map[key]={年級:normGrade(年級),班級:String(班級),座號:String(座號),姓名:String(姓名||""),性別:String(性別||""),items:[]}; order.push(key); }
-        map[key].items.push(String(項目).trim());
-      });
-      // 解析項目→代碼，計個人單項
-      REG_ROWS = order.map(function(k){
-        const s=map[k]; const codes=[]; const unresolved=[]; let indiv=0;
-        s.items.forEach(function(nm){
-          const e=findEventByName(nm, s.年級, s.性別);
-          if(!e){ unresolved.push(nm); return; }
-          codes.push(e["代碼"]);
-          if(String(e["計入限報"])==="是") indiv++;
+      if(!EVENTS.length){ return toast("項目資料載入中，請稍候再試","err"); }
+      let sheets; try{ sheets=await readAllSheets(f); }catch(e){ return toast("讀檔失敗："+e.message,"err"); }
+      const smap={}, order=[], evCount={};   // evCount: 年級|班別|代碼 -> 人數
+      sheets.forEach(function(sh){
+        const grade=sheetGrade(sh.name); if(!grade || !sh.rows.length) return;
+        const cols=Object.keys(sh.rows[0]).map(h=>({h, ev:headerToEvent(h,grade)})).filter(c=>c.ev);
+        sh.rows.forEach(function(r){
+          const 班別=String(r["班別"]||r["班級"]||"").trim();
+          const 座號=String(r["座號"]||"").trim();
+          const 姓名=String(r["姓名"]||"").trim();
+          if(!班別 || !姓名) return;
+          const joined=cols.filter(c=>String(r[c.h]||"").trim()!=="");
+          if(!joined.length) return;
+          const key=grade+"|"+班別+"|"+座號+"|"+姓名;
+          if(!smap[key]){ smap[key]={年級:grade,班級:班別,座號:座號,姓名:姓名,性別:"",codes:[],evNames:[],indiv:0}; order.push(key); }
+          const st=smap[key];
+          joined.forEach(function(c){
+            if(st.codes.indexOf(c.ev["代碼"])>=0) return;
+            st.codes.push(c.ev["代碼"]);
+            st.evNames.push(c.ev["名稱"]+"("+c.ev["性別"]+")");
+            if(!st.性別) st.性別=c.ev["性別"];
+            if(String(c.ev["計入限報"])==="是") st.indiv++;
+            const ck=grade+"|"+班別+"|"+c.ev["代碼"];
+            evCount[ck]=(evCount[ck]||0)+1;
+          });
         });
-        const over = indiv > CONFIG.maxIndividual;
-        return {年級:s.年級,班級:s.班級,座號:s.座號,姓名:s.姓名,性別:s.性別,codes,indiv,over,unresolved,items:s.items};
+      });
+      REG_ROWS = order.map(k=>{ const s=smap[k]; return Object.assign({}, s, {over: s.indiv>CONFIG.maxIndividual}); });
+      EVENT_OVER = Object.keys(evCount).filter(k=>evCount[k]>2).map(function(k){
+        const p=k.split("|"); const e=EVENTS.find(x=>x["代碼"]===p[2])||{};
+        return {班別:p[1], 項目:(e["名稱"]||p[2])+"("+(e["性別"]||"")+")", 人數:evCount[k]};
       });
       renderRegPreview();
     }
     function renderRegPreview(){
       const box=el("r_preview");
-      if(!REG_ROWS.length){ box.innerHTML='<div class="error">讀不到有效資料，請檢查欄位標題。</div>'; return; }
-      const overN = REG_ROWS.filter(r=>r.over).length;
-      const rows = REG_ROWS.map(function(r){
-        const cls = r.over ? 'style="background:#fdecea"' : (r.unresolved.length?'style="background:#fff4e0"':'');
-        const note = r.over ? `<span class="rank1">⚠ 超額 ${r.indiv} 項，不匯入</span>` :
-                     (r.unresolved.length? `<span style="color:#8a5a10">找不到項目：${esc(r.unresolved.join("、"))}</span>` : "OK");
+      if(!REG_ROWS.length){ box.innerHTML='<div class="error">讀不到有效資料。請確認：工作表名含 4/5/6，且有「班別、座號、姓名」欄與「男生60公尺…」項目欄。</div>'; return; }
+      const overN=REG_ROWS.filter(r=>r.over).length;
+      let warn="";
+      if(EVENT_OVER.length){
+        warn='<div class="api-warning">⚠ 下列項目同班報名超過 2 人（仍會匯入，請確認）：<br>'+
+          EVENT_OVER.map(o=>esc(o.班別+" "+o.項目+"："+o.人數+" 人")).join("；")+'</div>';
+      }
+      const rows=REG_ROWS.map(function(r){
+        const cls=r.over?'style="background:#fdecea"':'';
+        const note=r.over?`<span class="rank1">⚠ 報 ${r.indiv} 項，超過上限，不匯入</span>`:"OK";
         return `<tr ${cls}><td>${esc(r.班級)}</td><td>${esc(r.座號)}</td><td>${esc(r.姓名)}</td>
-          <td>${esc(r.items.join("、"))}</td><td style="text-align:center">${r.indiv}</td><td>${note}</td></tr>`;
+          <td>${esc(r.evNames.join("、"))}</td><td style="text-align:center">${r.indiv}</td><td>${note}</td></tr>`;
       }).join("");
-      box.innerHTML = `<div class="notice">共 ${REG_ROWS.length} 位學生，其中 <b class="${overN?'rank1':''}">${overN}</b> 位超額（不會匯入）。</div>
-        <div class="table-wrap"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th><th>報名項目</th><th>個人單項</th><th>狀態</th></tr></thead>
+      box.innerHTML=`<div class="notice">共 ${REG_ROWS.length} 位選手，其中 <b class="${overN?'rank1':''}">${overN}</b> 位超過每人 ${CONFIG.maxIndividual} 項（不匯入）。</div>${warn}
+        <div class="table-wrap"><table><thead><tr><th>班別</th><th>座號</th><th>姓名</th><th>報名項目</th><th>項目數</th><th>狀態</th></tr></thead>
         <tbody>${rows}</tbody></table></div>
         <div style="margin-top:12px"><button class="btn" id="r_import" type="button">確認匯入（略過超額者）</button></div>`;
       el("r_import").addEventListener("click", doRegImport);
     }
     async function doRegImport(){
-      const students = REG_ROWS.filter(r=>!r.over && r.codes.length).map(r=>({年級:r.年級,班級:r.班級,座號:r.座號,姓名:r.姓名,性別:r.性別,codes:r.codes}));
+      const students=REG_ROWS.filter(r=>!r.over && r.codes.length).map(r=>({年級:r.年級,班級:r.班級,座號:r.座號,姓名:r.姓名,性別:r.性別,codes:r.codes}));
       if(!students.length) return toast("沒有可匯入的資料","err");
       const b=el("r_import"); setBusy(b,true,"匯入中…");
       try{
@@ -203,14 +230,24 @@
       finally{ setBusy(b,false); }
     }
     function downloadRegTemplate(){
-      const ws = XLSX.utils.aoa_to_sheet([
-        ["年級","班級","座號","姓名","性別","項目名稱"],
-        ["5年級","5年1班","1","王小明","男","100公尺"],
-        ["5年級","5年1班","1","王小明","男","跳遠"],
-        ["5年級","5年2班","8","林小美","女","60公尺"]
-      ]);
-      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"報名");
-      XLSX.writeFile(wb,"報名匯入範例.xlsx");
+      if(!EVENTS.length) return toast("項目資料載入中，請稍候再試","err");
+      const wb=XLSX.utils.book_new();
+      [["4","4年級"],["5","5年級"],["6","6年級"]].forEach(function(g){
+        const evs=EVENTS.filter(e=>String(e["組別"])===g[1] && String(e["類別"])==="個人單項" && String(e["啟用"])==="是");
+        const headers=evs.map(e=>(e["性別"]==="男"?"男生":e["性別"]==="女"?"女生":"")+e["名稱"]);
+        const head=["班別","座號","姓名"].concat(headers);
+        const blank=headers.map(()=>"");
+        // 範例：兩位選手各報 2 項
+        const ex1=blank.slice(); if(headers.length){ex1[0]="V";} if(headers.length>2){ex1[2]="V";}
+        const ex2=blank.slice(); if(headers.length>1){ex2[1]="V";}
+        const aoa=[head,
+          [g[0]+"年1班","15","王小明"].concat(ex1),
+          [g[0]+"年2班","8","林小美"].concat(ex2)
+        ];
+        const ws=XLSX.utils.aoa_to_sheet(aoa);
+        XLSX.utils.book_append_sheet(wb, ws, g[1]);
+      });
+      XLSX.writeFile(wb,"報名匯入範例_勾選式.xlsx");
     }
 
     /* ---- 共用：讀 Excel/CSV ---- */
