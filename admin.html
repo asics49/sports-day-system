@@ -51,17 +51,8 @@
       <div id="a_list"><p class="muted">載入中…</p></div>
     </section>
 
-    <!-- 匯入報名 -->
     <section class="card panel" style="display:none">
-      <h2>Excel 匯入報名（格子勾選式）</h2>
-      <p class="muted">請先按「下載範例格式」，裡面有 <b>4、5、6 年級各一個工作表</b>，項目（男生60公尺、女生60公尺…）已排成欄位標題。</p>
-      <p class="muted">各班填法：<b>一位選手一列</b>，填「班別／座號／姓名」，再在他報名的項目欄位打「<b>V</b>」(或任何符號)。
-        系統匯入時自動判別，並檢查 <b>每人最多 <span id="maxTip">2</span> 項</b>（超過標紅不匯入）、<b>每項每班最多 2 人</b>（超過標黃提醒）。</p>
-      <div class="row">
-        <button class="btn ghost" id="r_tpl" type="button">下載範例格式（4/5/6年級）</button>
-        <input type="file" id="r_file" accept=".xlsx,.xls,.csv" style="max-width:320px">
-      </div>
-      <div id="r_preview" style="margin-top:12px"></div>
+      <p class="muted">📥 <b>報名匯入</b>已移到「<a href="register.html">線上報名</a>」頁（老師登入後即可批次上傳）。此管理頁專責公告。</p>
     </section>
   </main>
 
@@ -70,8 +61,7 @@
   <script src="js/layout.js"></script>
   <script>
     const AUTH_KEY = "yc_auth";
-    let AUTH = null, EVENTS = [], REG_ROWS = [];
-    el("maxTip").textContent = CONFIG.maxIndividual;
+    let AUTH = null, EVENTS = [];
     el("a_date").value = new Date().toISOString().slice(0, 10);
 
     function loadAuth(){ try{AUTH=JSON.parse(localStorage.getItem(AUTH_KEY));}catch(e){AUTH=null;} }
@@ -283,8 +273,6 @@
     el("pw").addEventListener("keydown", e=>{ if(e.key==="Enter") login(); });
     el("logoutBtn").addEventListener("click", ()=>{ clearAuth(); location.reload(); });
     el("a_pub").addEventListener("click", publishAnn);
-    el("r_file").addEventListener("change", onRegFile);
-    el("r_tpl").addEventListener("click", downloadRegTemplate);
 
     loadAuth();
     document.addEventListener("DOMContentLoaded", function(){ if(AUTH&&AUTH.token) showPanels(); else initGoogle(); });

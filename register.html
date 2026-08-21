@@ -7,51 +7,68 @@
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <script src="js/vendor/xlsx.full.min.js"></script>
 </head>
 <body data-page="register">
   <main>
-    <section class="card">
-      <h2>個人資料</h2>
+    <!-- 登入（報名由老師進行） -->
+    <section class="card" id="loginCard">
+      <h2>報名登入</h2>
+      <p class="muted">報名由 <b>各班老師</b> 登入後進行（避免任意亂報）。請用學校發的「報名上傳」帳號密碼登入；忘記請洽體育組。</p>
+      <div id="gbtn"></div>
+      <div id="gTip" class="muted" style="font-size:13px;margin-top:6px"></div>
+      <div class="grid2" style="margin-top:12px">
+        <div><label>帳號</label><input id="email" placeholder="報名上傳帳號" autocomplete="username"></div>
+        <div><label>密碼</label><input id="pw" type="password" autocomplete="current-password"></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn" id="loginBtn" type="button">登入</button></div>
+      <div id="loginMsg"></div>
+    </section>
+
+    <section class="card reg-panel" id="whoCard" style="display:none">
+      <div class="row" style="justify-content:space-between">
+        <div class="muted">已登入：<b id="who"></b></div>
+        <button class="btn ghost" id="logoutBtn" type="button">登出</button>
+      </div>
+    </section>
+
+    <!-- 逐人報名 -->
+    <section class="card reg-panel" style="display:none">
+      <h2>逐人報名</h2>
       <div class="grid2">
         <div>
           <label>年級 *</label>
-          <select id="grade">
-            <option value="">請選擇</option>
-            <option>4年級</option><option>5年級</option><option>6年級</option>
-          </select>
+          <select id="grade"><option value="">請選擇</option><option>4年級</option><option>5年級</option><option>6年級</option></select>
         </div>
-        <div>
-          <label>班級 *（例：4年1班）</label>
-          <input id="cls" placeholder="4年1班">
-        </div>
-        <div>
-          <label>座號 *</label>
-          <input id="seat" inputmode="numeric" placeholder="15">
-        </div>
-        <div>
-          <label>姓名 *</label>
-          <input id="name" placeholder="王小明">
-        </div>
-        <div>
-          <label>性別 *</label>
-          <select id="sex"><option value="">請選擇</option><option>男</option><option>女</option></select>
-        </div>
-        <div style="align-self:end">
-          <button class="btn ghost" id="checkBtn" type="button">查我已報名的項目</button>
-        </div>
+        <div><label>班級 *（例：4年1班）</label><input id="cls" placeholder="4年1班"></div>
+        <div><label>座號 *</label><input id="seat" inputmode="numeric" placeholder="15"></div>
+        <div><label>姓名 *</label><input id="name" placeholder="王小明"></div>
+        <div><label>性別 *</label><select id="sex"><option value="">請選擇</option><option>男</option><option>女</option></select></div>
+        <div style="align-self:end"><button class="btn ghost" id="checkBtn" type="button">查該生已報名項目</button></div>
       </div>
       <div id="mine"></div>
     </section>
 
-    <section class="card">
+    <section class="card reg-panel" style="display:none">
       <h2>選擇報名項目</h2>
       <p class="muted">個人單項每人限報 <b id="maxTip">2</b> 項；大隊接力、趣味競賽不計入。
         目前已選個人單項：<span id="counter" class="counter">0</span> 項。</p>
-      <div id="events"><p class="muted">請先選擇「年級」與「性別」，系統會列出可報名的項目。</p></div>
+      <div id="events"><p class="muted">請先選擇「年級」與「性別」。</p></div>
       <div id="warn"></div>
-      <div style="margin-top:16px">
-        <button class="btn" id="submitBtn" type="button">送出報名</button>
+      <div style="margin-top:16px"><button class="btn" id="submitBtn" type="button">送出報名</button></div>
+    </section>
+
+    <!-- Excel 批次匯入報名 -->
+    <section class="card reg-panel" style="display:none">
+      <h2>Excel 批次匯入報名（格子勾選式）</h2>
+      <p class="muted">按「下載範本」取得檔案（含 <b>4/5/6 年級</b> 三個工作表與填寫說明）。各班一位選手一列，填 班別/座號/姓名，
+        在報名的項目欄位打「<b>V</b>」，系統自動判別，並檢查 <b>每人最多 <span id="maxTip2">2</span> 項</b>、<b>每項每班最多 2 人</b>。</p>
+      <div class="row">
+        <button class="btn ghost" id="r_tpl" type="button">下載範本（4/5/6年級）</button>
+        <input type="file" id="r_file" accept=".xlsx,.xls,.csv" style="max-width:320px">
       </div>
+      <div id="r_preview" style="margin-top:12px"></div>
     </section>
   </main>
 
@@ -59,110 +76,208 @@
   <script src="js/api.js"></script>
   <script src="js/layout.js"></script>
   <script>
-    let EVENTS = [];
+    const AUTH_KEY = "yc_auth";
+    let AUTH = null, EVENTS = [], ALLEVENTS = [], REG_ROWS = [], EVENT_OVER = [];
     el("maxTip").textContent = CONFIG.maxIndividual;
+    el("maxTip2").textContent = CONFIG.maxIndividual;
 
-    async function loadEvents() {
-      const grade = el("grade").value, sex = el("sex").value;
-      const box = el("events");
-      if (!grade) { box.innerHTML = '<p class="muted">請先選擇「年級」。</p>'; return; }
-      box.innerHTML = '<p class="muted">載入項目中…</p>';
-      try {
-        const data = await apiGet("events", { grade });
-        EVENTS = data.events.filter(function (e) {
-          if (!sex) return true;
-          const g = String(e["性別"]);
-          return g === "混合" || g === sex || g === "";
-        });
-        renderEvents();
-      } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    function loadAuth(){ try{AUTH=JSON.parse(localStorage.getItem(AUTH_KEY));}catch(e){AUTH=null;} }
+    function saveAuth(a){ AUTH=a; localStorage.setItem(AUTH_KEY, JSON.stringify(a)); }
+    function clearAuth(){ AUTH=null; localStorage.removeItem(AUTH_KEY); if(window.google&&google.accounts) google.accounts.id.disableAutoSelect(); }
+
+    /* ---- 登入 ---- */
+    function initGoogle(t){ t=t||0;
+      if(!CONFIG.GOOGLE_CLIENT_ID){ el("gTip").textContent=""; return; }
+      if(!window.google||!google.accounts||!google.accounts.id){ if(t<20) return setTimeout(()=>initGoogle(t+1),300); return; }
+      google.accounts.id.initialize({client_id:CONFIG.GOOGLE_CLIENT_ID, callback:onGoogle});
+      google.accounts.id.renderButton(el("gbtn"),{theme:"filled_blue",size:"large",text:"signin_with",shape:"pill",locale:"zh_TW",width:280});
+    }
+    async function onGoogle(resp){ el("gTip").textContent="驗證中…";
+      try{ const r=await apiPost("googleLogin",{credential:resp.credential}); saveAuth(r); el("gTip").textContent=""; showReg(); toast("登入成功："+r.name,"ok"); }
+      catch(e){ el("gTip").textContent=""; el("loginMsg").innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
+    }
+    async function login(){
+      const email=el("email").value.trim(), pw=el("pw").value;
+      if(!email||!pw) return toast("請輸入帳號與密碼","err");
+      const b=el("loginBtn"); setBusy(b,true,"登入中…");
+      try{ const r=await apiPost("login",{email,password:pw}); saveAuth(r); el("loginMsg").innerHTML=""; showReg(); toast("登入成功","ok"); }
+      catch(e){ el("loginMsg").innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
+      finally{ setBusy(b,false); }
+    }
+    function showReg(){
+      el("loginCard").style.display="none";
+      document.querySelectorAll(".reg-panel").forEach(p=>p.style.display="block");
+      el("who").textContent = AUTH.name + "（" + (AUTH.role==="admin"?"管理者":"老師") + "）";
+      apiGet("events").then(d=>{ ALLEVENTS=d.events; }).catch(()=>{});
     }
 
-    function renderEvents() {
-      const box = el("events");
-      if (!EVENTS.length) { box.innerHTML = '<p class="muted">此條件下暫無可報名項目。</p>'; return; }
-      const groups = { "個人單項": [], "大隊接力": [], "趣味競賽": [] };
-      EVENTS.forEach(function (e) { (groups[e["類別"]] || (groups[e["類別"]] = [])).push(e); });
-      let html = "";
-      Object.keys(groups).forEach(function (cat) {
-        if (!groups[cat].length) return;
-        html += `<h3 style="margin:14px 0 4px;color:var(--gold-d)">${cat}</h3><div class="events-grid">`;
-        html += groups[cat].map(function (e) {
-          const counts = String(e["計入限報"]) === "是";
-          const badge = counts ? '<span class="badge">計入</span>' : '<span class="badge no">不計入</span>';
-          return `<label class="ev" data-count="${counts ? 1 : 0}">
-            <input type="checkbox" value="${e["代碼"]}">
-            <span><span class="name">${esc(e["名稱"])}</span>${badge}
-            <br><span class="meta">${esc(e["組別"])} · ${esc(e["性別"])}</span></span></label>`;
+    /* ---- 逐人報名 ---- */
+    async function loadEvents(){
+      const grade=el("grade").value, sex=el("sex").value, box=el("events");
+      if(!grade){ box.innerHTML='<p class="muted">請先選擇「年級」。</p>'; return; }
+      box.innerHTML='<p class="muted">載入項目中…</p>';
+      try{
+        const data=await apiGet("events",{grade});
+        EVENTS=data.events.filter(function(e){ if(!sex) return true; const g=String(e["性別"]); return g==="混合"||g===sex||g===""; });
+        renderEvents();
+      }catch(e){ box.innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
+    }
+    function renderEvents(){
+      const box=el("events");
+      if(!EVENTS.length){ box.innerHTML='<p class="muted">此條件下暫無可報名項目。</p>'; return; }
+      const groups={"個人單項":[],"大隊接力":[],"趣味競賽":[]};
+      EVENTS.forEach(function(e){ (groups[e["類別"]]||(groups[e["類別"]]=[])).push(e); });
+      let html="";
+      Object.keys(groups).forEach(function(cat){
+        if(!groups[cat].length) return;
+        html+=`<h3 style="margin:14px 0 4px;color:var(--gold-d)">${cat}</h3><div class="events-grid">`;
+        html+=groups[cat].map(function(e){
+          const counts=String(e["計入限報"])==="是";
+          const badge=counts?'<span class="badge">計入</span>':'<span class="badge no">不計入</span>';
+          return `<label class="ev" data-count="${counts?1:0}"><input type="checkbox" value="${e["代碼"]}">
+            <span><span class="name">${esc(e["名稱"])}</span>${badge}<br><span class="meta">${esc(e["組別"])} · ${esc(e["性別"])}</span></span></label>`;
         }).join("");
-        html += `</div>`;
+        html+=`</div>`;
       });
-      box.innerHTML = html;
-      box.querySelectorAll(".ev input").forEach(function (chk) {
-        chk.addEventListener("change", function () {
-          chk.closest(".ev").classList.toggle("checked", chk.checked);
-          updateCounter();
-        });
-      });
+      box.innerHTML=html;
+      box.querySelectorAll(".ev input").forEach(function(chk){ chk.addEventListener("change",function(){ chk.closest(".ev").classList.toggle("checked",chk.checked); updateCounter(); }); });
       updateCounter();
     }
-
-    function updateCounter() {
-      let n = 0;
-      document.querySelectorAll(".ev input:checked").forEach(function (chk) {
-        if (chk.closest(".ev").dataset.count === "1") n++;
-      });
-      const c = el("counter"); c.textContent = n;
-      const over = n > CONFIG.maxIndividual;
-      c.classList.toggle("over", over);
-      el("warn").innerHTML = over
-        ? `<div class="error">⚠ 個人單項已選 ${n} 項，超過上限 ${CONFIG.maxIndividual} 項！請取消部分項目才能送出。</div>` : "";
-      el("submitBtn").disabled = over;
-      return n;
+    function updateCounter(){
+      let n=0; document.querySelectorAll(".ev input:checked").forEach(function(chk){ if(chk.closest(".ev").dataset.count==="1") n++; });
+      const c=el("counter"); c.textContent=n; const over=n>CONFIG.maxIndividual; c.classList.toggle("over",over);
+      el("warn").innerHTML=over?`<div class="error">⚠ 個人單項已選 ${n} 項，超過上限 ${CONFIG.maxIndividual} 項！請取消部分項目。</div>`:"";
+      el("submitBtn").disabled=over; return n;
     }
-
-    async function checkMine() {
-      const grade = el("grade").value, cls = el("cls").value.trim(), seat = el("seat").value.trim();
-      const box = el("mine");
-      if (!grade || !cls || !seat) { toast("請先填年級、班級、座號", "err"); return; }
-      box.innerHTML = '<p class="muted">查詢中…</p>';
-      try {
-        const data = await apiGet("student", { grade, cls, seat });
-        if (!data.regs.length) { box.innerHTML = '<div class="notice">目前尚無報名紀錄。</div>'; return; }
-        box.innerHTML = '<div class="notice"><b>你已報名：</b>' +
-          data.regs.map(r => esc(r["項目名稱"]) + "（" + esc(r["類別"]) + "）").join("、") + "</div>";
-      } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    async function checkMine(){
+      const grade=el("grade").value, cls=el("cls").value.trim(), seat=el("seat").value.trim(), box=el("mine");
+      if(!grade||!cls||!seat) return toast("請先填年級、班級、座號","err");
+      box.innerHTML='<p class="muted">查詢中…</p>';
+      try{ const d=await apiGet("student",{grade,cls,seat});
+        box.innerHTML=d.regs.length? '<div class="notice"><b>已報名：</b>'+d.regs.map(r=>esc(r["項目名稱"])+"（"+esc(r["類別"])+"）").join("、")+"</div>" : '<div class="notice">目前尚無報名紀錄。</div>';
+      }catch(e){ box.innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
     }
-
-    async function submit() {
-      const payload = {
-        年級: el("grade").value, 班級: el("cls").value.trim(), 座號: el("seat").value.trim(),
-        姓名: el("name").value.trim(), 性別: el("sex").value,
-        codes: Array.from(document.querySelectorAll(".ev input:checked")).map(c => c.value),
-      };
-      if (!payload.年級 || !payload.班級 || !payload.座號 || !payload.姓名 || !payload.性別)
-        return toast("請完整填寫個人資料", "err");
-      if (!payload.codes.length) return toast("請至少勾選一個項目", "err");
-      if (updateCounter() > CONFIG.maxIndividual) return toast("個人單項超過上限", "err");
-
-      const btn = el("submitBtn"); setBusy(btn, true, "送出中…");
-      try {
-        const res = await apiPost("register", payload);
-        toast(res.msg, "ok");
-        el("warn").innerHTML = '<div class="notice">✅ ' + esc(res.msg) + '</div>';
-        document.querySelectorAll(".ev input:checked").forEach(c => { c.checked = false; c.closest(".ev").classList.remove("checked"); });
+    async function submitReg(){
+      const payload={年級:el("grade").value,班級:el("cls").value.trim(),座號:el("seat").value.trim(),姓名:el("name").value.trim(),性別:el("sex").value,
+        codes:Array.from(document.querySelectorAll(".ev input:checked")).map(c=>c.value)};
+      if(!payload.年級||!payload.班級||!payload.座號||!payload.姓名||!payload.性別) return toast("請完整填寫個人資料","err");
+      if(!payload.codes.length) return toast("請至少勾選一個項目","err");
+      if(updateCounter()>CONFIG.maxIndividual) return toast("個人單項超過上限","err");
+      const btn=el("submitBtn"); setBusy(btn,true,"送出中…");
+      try{ const res=await apiPost("register",payload); toast(res.msg,"ok");
+        el("warn").innerHTML='<div class="notice">✅ '+esc(res.msg)+'</div>';
+        document.querySelectorAll(".ev input:checked").forEach(c=>{c.checked=false;c.closest(".ev").classList.remove("checked");});
         updateCounter(); checkMine();
-      } catch (e) {
-        el("warn").innerHTML = '<div class="error">' + esc(e.message) + '</div>';
-        toast(e.message, "err");
-      } finally { setBusy(btn, false); }
+      }catch(e){ el("warn").innerHTML='<div class="error">'+esc(e.message)+'</div>'; toast(e.message,"err"); }
+      finally{ setBusy(btn,false); }
     }
 
+    /* ---- Excel 批次匯入報名 ---- */
+    function sheetGrade(name){ const m=String(name).match(/[456]/); return m?m[0]+"年級":""; }
+    function headerToEvent(header, grade){
+      header=String(header).trim(); let sex="", name=header;
+      if(header.indexOf("男生")===0){ sex="男"; name=header.slice(2); }
+      else if(header.indexOf("女生")===0){ sex="女"; name=header.slice(2); } else return null;
+      name=name.trim();
+      const m=ALLEVENTS.filter(e=>String(e["組別"])===grade && String(e["名稱"])===name && String(e["性別"])===sex);
+      return m.length?m[0]:null;
+    }
+    function readAllSheets(file){
+      return new Promise(function(resolve,reject){ const fr=new FileReader();
+        fr.onload=function(e){ try{ const wb=XLSX.read(e.target.result,{type:"array"});
+          resolve(wb.SheetNames.map(n=>({name:n,rows:XLSX.utils.sheet_to_json(wb.Sheets[n],{defval:""})}))); }catch(err){reject(err);} };
+        fr.onerror=reject; fr.readAsArrayBuffer(file); });
+    }
+    async function onRegFile(ev){
+      const f=ev.target.files[0]; if(!f) return;
+      if(!ALLEVENTS.length){ return toast("項目資料載入中，請稍候再試","err"); }
+      let sheets; try{ sheets=await readAllSheets(f); }catch(e){ return toast("讀檔失敗："+e.message,"err"); }
+      const smap={}, order=[], evCount={};
+      sheets.forEach(function(sh){
+        const grade=sheetGrade(sh.name); if(!grade||!sh.rows.length) return;
+        const cols=Object.keys(sh.rows[0]).map(h=>({h,ev:headerToEvent(h,grade)})).filter(c=>c.ev);
+        sh.rows.forEach(function(r){
+          const 班別=String(r["班別"]||r["班級"]||"").trim(), 座號=String(r["座號"]||"").trim(), 姓名=String(r["姓名"]||"").trim();
+          if(!班別||!姓名) return;
+          if(/範例|說明|請刪除/.test(班別)||/範例|請刪除/.test(姓名)) return;
+          const joined=cols.filter(c=>String(r[c.h]||"").trim()!=="");
+          if(!joined.length) return;
+          const key=grade+"|"+班別+"|"+座號+"|"+姓名;
+          if(!smap[key]){ smap[key]={年級:grade,班級:班別,座號:座號,姓名:姓名,性別:"",codes:[],evNames:[],indiv:0}; order.push(key); }
+          const st=smap[key];
+          joined.forEach(function(c){ if(st.codes.indexOf(c.ev["代碼"])>=0) return;
+            st.codes.push(c.ev["代碼"]); st.evNames.push(c.ev["名稱"]+"("+c.ev["性別"]+")");
+            if(!st.性別) st.性別=c.ev["性別"];
+            if(String(c.ev["計入限報"])==="是") st.indiv++;
+            const ck=grade+"|"+班別+"|"+c.ev["代碼"]; evCount[ck]=(evCount[ck]||0)+1;
+          });
+        });
+      });
+      REG_ROWS=order.map(k=>{ const s=smap[k]; return Object.assign({},s,{over:s.indiv>CONFIG.maxIndividual}); });
+      EVENT_OVER=Object.keys(evCount).filter(k=>evCount[k]>2).map(function(k){ const p=k.split("|"); const e=ALLEVENTS.find(x=>x["代碼"]===p[2])||{};
+        return {班別:p[1],項目:(e["名稱"]||p[2])+"("+(e["性別"]||"")+")",人數:evCount[k]}; });
+      renderRegPreview();
+    }
+    function renderRegPreview(){
+      const box=el("r_preview");
+      if(!REG_ROWS.length){ box.innerHTML='<div class="error">讀不到有效資料。請確認工作表名含 4/5/6，且有「班別、座號、姓名」欄與「男生60公尺…」項目欄。</div>'; return; }
+      const overN=REG_ROWS.filter(r=>r.over).length;
+      let warn=""; if(EVENT_OVER.length){ warn='<div class="api-warning">⚠ 下列項目同班報名超過 2 人（仍會匯入，請確認）：<br>'+EVENT_OVER.map(o=>esc(o.班別+" "+o.項目+"："+o.人數+" 人")).join("；")+'</div>'; }
+      const rows=REG_ROWS.map(function(r){ const cls=r.over?'style="background:#fdecea"':'';
+        const note=r.over?`<span class="rank1">⚠ 報 ${r.indiv} 項，超過上限，不匯入</span>`:"OK";
+        return `<tr ${cls}><td>${esc(r.班級)}</td><td>${esc(r.座號)}</td><td>${esc(r.姓名)}</td><td>${esc(r.evNames.join("、"))}</td><td style="text-align:center">${r.indiv}</td><td>${note}</td></tr>`;
+      }).join("");
+      box.innerHTML=`<div class="notice">共 ${REG_ROWS.length} 位選手，其中 <b class="${overN?'rank1':''}">${overN}</b> 位超過每人 ${CONFIG.maxIndividual} 項（不匯入）。</div>${warn}
+        <div class="table-wrap"><table><thead><tr><th>班別</th><th>座號</th><th>姓名</th><th>報名項目</th><th>項目數</th><th>狀態</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div style="margin-top:12px"><button class="btn" id="r_import" type="button">確認匯入（略過超額者）</button></div>`;
+      el("r_import").addEventListener("click", doRegImport);
+    }
+    async function doRegImport(){
+      const students=REG_ROWS.filter(r=>!r.over&&r.codes.length).map(r=>({年級:r.年級,班級:r.班級,座號:r.座號,姓名:r.姓名,性別:r.性別,codes:r.codes}));
+      if(!students.length) return toast("沒有可匯入的資料","err");
+      const b=el("r_import"); setBusy(b,true,"匯入中…");
+      try{ const res=await apiPost("importReg",{token:AUTH.token,students});
+        toast("匯入完成：新增 "+res.addedTotal+" 筆報名，超額略過 "+res.overCount+" 位","ok");
+        el("r_preview").innerHTML+='<div class="notice">✅ 已匯入 '+res.addedTotal+' 筆。</div>';
+      }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
+      finally{ setBusy(b,false); }
+    }
+    function downloadRegTemplate(){
+      if(!ALLEVENTS.length) return toast("項目資料載入中，請稍候再試","err");
+      const wb=XLSX.utils.book_new();
+      const help=[["右昌國小運動會 — 報名匯入填寫說明"],[""],
+        ["1. 本檔有『4年級／5年級／6年級』三個工作表，請在對應年級填寫。"],
+        ["2. 一位選手一列：填 班別、座號、姓名，再在他報名的項目欄位打 V。"],
+        ["3. 每人最多報 2 個個人單項；每個項目同班最多 2 人。"],
+        ["4. 各表已放『範例－』開頭的示範列，照著填即可；可刪除，不刪也沒關係（系統會自動略過）。"],
+        ["5. 從範例列下方接著填你們班的選手。"],
+        ["6. 大隊接力／趣味競賽不在此表。"]];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(help), "填寫說明");
+      [["4","4年級"],["5","5年級"],["6","6年級"]].forEach(function(g){
+        const evs=ALLEVENTS.filter(e=>String(e["組別"])===g[1]&&String(e["類別"])==="個人單項"&&String(e["啟用"])==="是");
+        const headers=evs.map(e=>(e["性別"]==="男"?"男生":e["性別"]==="女"?"女生":"")+e["名稱"]);
+        const head=["班別","座號","姓名"].concat(headers), blank=headers.map(()=>"");
+        const ex1=blank.slice(); if(headers.length){ex1[0]="V";} if(headers.length>2){ex1[2]="V";}
+        const ex2=blank.slice(); if(headers.length>1){ex2[1]="V";}
+        const aoa=[head,[g[0]+"年1班","15","範例－王小明"].concat(ex1),[g[0]+"年2班","8","範例－林小美"].concat(ex2)];
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), g[1]);
+      });
+      XLSX.writeFile(wb,"報名匯入範本_勾選式.xlsx");
+    }
+
+    el("loginBtn").addEventListener("click", login);
+    el("pw").addEventListener("keydown", e=>{ if(e.key==="Enter") login(); });
+    el("logoutBtn").addEventListener("click", ()=>{ clearAuth(); location.reload(); });
     el("grade").addEventListener("change", loadEvents);
     el("sex").addEventListener("change", loadEvents);
     el("checkBtn").addEventListener("click", checkMine);
-    el("submitBtn").addEventListener("click", submit);
-    function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+    el("submitBtn").addEventListener("click", submitReg);
+    el("r_file").addEventListener("change", onRegFile);
+    el("r_tpl").addEventListener("click", downloadRegTemplate);
+
+    loadAuth();
+    document.addEventListener("DOMContentLoaded", function(){ if(AUTH&&AUTH.token) showReg(); else initGoogle(); });
+    function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   </script>
 </body>
 </html>
