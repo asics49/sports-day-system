@@ -1,0 +1,14 @@
+# 後端程式含密鑰，不放公開 repo（已部署在 Apps Script，本機保留即可）
+apps-script/
+
+# Google Drive 產生的捷徑/暫存檔
+*.gsheet
+*.gdoc
+*.gslides
+.tmp.driveupload/
+.tmp.drivedownload/
+
+# 系統檔
+.DS_Store
+Thumbs.db
+desktop.ini

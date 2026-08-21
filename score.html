@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>成績輸入 · 右昌國小運動會</title>
+  <link rel="icon" href="assets/banner-small.jpg">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://accounts.google.com/gsi/client" async></script>
+</head>
+<body data-page="score">
+  <main>
+    <!-- 登入 -->
+    <section class="card" id="loginCard">
+      <h2>成績輸入登入</h2>
+      <p class="muted">體育老師請用學校 <b>Google 帳號一鍵登入</b>（須先由管理員加入試算表「授權」分頁）。</p>
+      <div id="gbtn"></div>
+      <div id="gTip" class="muted" style="font-size:13px;margin-top:8px"></div>
+
+      <details style="margin-top:18px">
+        <summary style="cursor:pointer;font-weight:600;color:var(--gold-d)">改用管理者帳號 / 密碼登入</summary>
+        <div class="grid2" style="margin-top:10px">
+          <div><label>帳號 (Email)</label><input id="email" placeholder="admin@youchang" autocomplete="username"></div>
+          <div><label>密碼</label><input id="pw" type="password" autocomplete="current-password"></div>
+        </div>
+        <div style="margin-top:14px"><button class="btn ghost" id="loginBtn" type="button">登入</button></div>
+      </details>
+      <div id="loginMsg"></div>
+    </section>
+
+    <!-- 已登入後的操作區 -->
+    <section class="card" id="panel" style="display:none">
+      <h2>成績輸入</h2>
+      <div class="row" style="justify-content:space-between">
+        <div class="muted">已登入：<b id="who"></b></div>
+        <button class="btn ghost" id="logoutBtn" type="button">登出</button>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
+
+      <label>選擇項目</label>
+      <select id="code"><option value="">請選擇項目</option></select>
+
+      <div id="area" style="margin-top:14px"></div>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    const AUTH_KEY = "yc_auth";
+    let AUTH = null, EVENTS = [], REG = [];
+
+    function loadAuth() { try { AUTH = JSON.parse(localStorage.getItem(AUTH_KEY)); } catch (e) { AUTH = null; } }
+    function saveAuth(a) { AUTH = a; localStorage.setItem(AUTH_KEY, JSON.stringify(a)); }
+    function clearAuth() { AUTH = null; localStorage.removeItem(AUTH_KEY); if (window.google && google.accounts) google.accounts.id.disableAutoSelect(); }
+
+    /* ---- Google 一鍵登入 ---- */
+    function initGoogle(tries) {
+      tries = tries || 0;
+      if (!CONFIG.GOOGLE_CLIENT_ID) {
+        el("gTip").innerHTML = "（尚未設定 Google 登入。請見 README 設定 Client ID，或用下方管理者帳密登入。）";
+        return;
+      }
+      if (!window.google || !google.accounts || !google.accounts.id) {
+        if (tries < 20) return setTimeout(function () { initGoogle(tries + 1); }, 300);
+        el("gTip").innerHTML = "（Google 登入元件載入失敗，請檢查網路，或改用下方管理者帳密。）";
+        return;
+      }
+      google.accounts.id.initialize({ client_id: CONFIG.GOOGLE_CLIENT_ID, callback: onGoogleCred });
+      google.accounts.id.renderButton(el("gbtn"),
+        { theme: "filled_blue", size: "large", text: "signin_with", shape: "pill", locale: "zh_TW", width: 280 });
+    }
+
+    async function onGoogleCred(resp) {
+      el("gTip").textContent = "驗證中…";
+      try {
+        const res = await apiPost("googleLogin", { credential: resp.credential });
+        saveAuth(res);
+        el("loginMsg").innerHTML = "";
+        el("gTip").textContent = "";
+        showPanel();
+        toast("登入成功：" + res.name, "ok");
+      } catch (e) {
+        el("gTip").textContent = "";
+        el("loginMsg").innerHTML = '<div class="error">' + esc(e.message) + '</div>';
+      }
+    }
+
+    async function login() {
+      const email = el("email").value.trim(), pw = el("pw").value;
+      if (!email || !pw) return toast("請輸入帳號與密碼", "err");
+      const btn = el("loginBtn"); setBusy(btn, true, "登入中…");
+      try {
+        const res = await apiPost("login", { email, password: pw });
+        saveAuth(res);
+        el("loginMsg").innerHTML = "";
+        showPanel();
+        toast("登入成功", "ok");
+      } catch (e) {
+        el("loginMsg").innerHTML = '<div class="error">' + esc(e.message) + '</div>';
+      } finally { setBusy(btn, false); }
+    }
+
+    function showPanel() {
+      el("loginCard").style.display = "none";
+      el("panel").style.display = "block";
+      el("who").textContent = AUTH.name + "（" + (AUTH.role === "admin" ? "管理者" : "老師") + "）";
+      fillEvents();
+    }
+
+    async function fillEvents() {
+      try {
+        const data = await apiGet("events");
+        EVENTS = data.events;
+        const sel = el("code");
+        sel.innerHTML = '<option value="">請選擇項目</option>';
+        EVENTS.forEach(function (e) {
+          const o = document.createElement("option");
+          o.value = e["代碼"]; o.textContent = e["名稱"] + "（" + e["組別"] + " " + e["性別"] + "）";
+          sel.appendChild(o);
+        });
+      } catch (e) { toast(e.message, "err"); }
+    }
+
+    async function onPickEvent() {
+      const code = el("code").value, area = el("area");
+      if (!code) { area.innerHTML = ""; return; }
+      area.innerHTML = '<p class="muted">載入報名名單與現有成績…</p>';
+      try {
+        const [regData, resData] = await Promise.all([
+          apiGet("registrants", { code }),
+          apiGet("query", { code }),
+        ]);
+        REG = regData.registrants;
+        renderRows(code, resData.results);
+      } catch (e) { area.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+
+    function renderRows(code, existing) {
+      const n = CONFIG.scoreTable.length;                // 名次 1..N
+      const byRank = {};
+      (existing || []).forEach(r => { byRank[Number(r["名次"])] = r; });
+
+      const opts = REG.map((r, i) => `<option value="${i}">${esc(r["班級"])} ${esc(r["姓名"])}（座${esc(r["座號"])}）</option>`).join("");
+      let html = REG.length
+        ? `<p class="notice">此項目共 ${REG.length} 人報名。可從下拉選擇報名者自動帶入班級/姓名，或手動輸入（大隊接力、趣味競賽請直接填班級）。</p>`
+        : `<p class="notice">此項目尚無報名資料，請手動填入班級。</p>`;
+
+      html += '<div class="table-wrap"><table><thead><tr><th>名次</th><th>選報名者</th><th>年級</th><th>班級</th><th>姓名</th><th>得分</th></tr></thead><tbody>';
+      for (let rank = 1; rank <= n; rank++) {
+        const ex = byRank[rank] || {};
+        html += `<tr data-rank="${rank}">
+          <td class="${rank <= 3 ? "rank" + rank : ""}" style="font-weight:800">${rank}</td>
+          <td><select class="pick"><option value="">— 手動 —</option>${opts}</select></td>
+          <td><select class="g"><option value=""></option><option ${ex["年級"] == "4年級" ? "selected" : ""}>4年級</option><option ${ex["年級"] == "5年級" ? "selected" : ""}>5年級</option><option ${ex["年級"] == "6年級" ? "selected" : ""}>6年級</option></select></td>
+          <td><input class="c" value="${esc(ex["班級"] || "")}" placeholder="4年1班"></td>
+          <td><input class="nm" value="${esc(ex["姓名"] || "")}" placeholder="姓名"></td>
+          <td class="sc">${CONFIG.scoreTable[rank - 1]}</td></tr>`;
+      }
+      html += '</tbody></table></div>';
+      html += `<div class="row" style="margin-top:14px">
+        <button class="btn" id="saveBtn" type="button">儲存成績</button>
+        <button class="btn red" id="delBtn" type="button">清除此項成績</button>
+        <span class="muted">儲存會覆蓋此項目原有成績。</span></div>`;
+      el("area").innerHTML = html;
+
+      el("area").querySelectorAll("tr[data-rank]").forEach(function (tr) {
+        tr.querySelector(".pick").addEventListener("change", function () {
+          const v = this.value;
+          if (v === "") return;
+          const r = REG[Number(v)];
+          tr.querySelector(".g").value = r["年級"] || "";
+          tr.querySelector(".c").value = r["班級"] || "";
+          tr.querySelector(".nm").value = r["姓名"] || "";
+        });
+      });
+      el("saveBtn").addEventListener("click", () => save(code));
+      el("delBtn").addEventListener("click", () => del(code));
+    }
+
+    async function save(code) {
+      const rows = [];
+      el("area").querySelectorAll("tr[data-rank]").forEach(function (tr) {
+        const cls = tr.querySelector(".c").value.trim();
+        const nm = tr.querySelector(".nm").value.trim();
+        if (!cls && !nm) return;                    // 空白列略過
+        rows.push({ 名次: Number(tr.dataset.rank), 年級: tr.querySelector(".g").value, 班級: cls, 姓名: nm });
+      });
+      if (!rows.length) return toast("請至少填一列成績", "err");
+      const btn = el("saveBtn"); setBusy(btn, true, "儲存中…");
+      try {
+        const res = await apiPost("submitScore", { token: AUTH.token, code, rows });
+        toast(res.msg, "ok");
+      } catch (e) {
+        toast(e.message, "err");
+        if (/登入/.test(e.message)) { clearAuth(); location.reload(); }
+      } finally { setBusy(btn, false); }
+    }
+
+    async function del(code) {
+      if (!confirm("確定要清除此項目的所有成績嗎？")) return;
+      try {
+        const res = await apiPost("deleteScore", { token: AUTH.token, code });
+        toast(res.msg, "ok");
+        onPickEvent();
+      } catch (e) { toast(e.message, "err"); }
+    }
+
+    el("loginBtn").addEventListener("click", login);
+    el("pw").addEventListener("keydown", e => { if (e.key === "Enter") login(); });
+    el("logoutBtn").addEventListener("click", () => { clearAuth(); location.reload(); });
+    el("code").addEventListener("change", onPickEvent);
+
+    loadAuth();
+    document.addEventListener("DOMContentLoaded", function () {
+      if (AUTH && AUTH.token) showPanel();
+      else initGoogle();
+    });
+    function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  </script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>班級積分 · 右昌國小運動會</title>
+  <link rel="icon" href="assets/banner-small.jpg">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="ranking">
+  <main>
+    <section class="card">
+      <h2>班級積分排行榜</h2>
+      <div class="row">
+        <div style="min-width:160px">
+          <label>年級</label>
+          <select id="grade"><option value="">全部年級</option><option>4年級</option><option>5年級</option><option>6年級</option></select>
+        </div>
+        <div><button class="btn" id="go" type="button">重新整理</button></div>
+      </div>
+      <div id="out" style="margin-top:14px"><p class="muted">載入中…</p></div>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    async function run() {
+      const out = el("out"); out.innerHTML = '<p class="muted">載入中…</p>';
+      try {
+        const data = await apiGet("ranking", { grade: el("grade").value });
+        if (!data.ranking.length) { out.innerHTML = '<div class="notice">尚無積分資料。</div>'; return; }
+        const medal = ["🥇","🥈","🥉"];
+        const rows = data.ranking.map(function (r, i) {
+          const cls = i < 3 ? "rank" + (i + 1) : "";
+          return `<tr>
+            <td class="${cls}" style="font-size:16px">${medal[i] || (i + 1)}</td>
+            <td>${esc(r["年級"])}</td><td>${esc(r["班級"])}</td>
+            <td class="${cls}" style="font-weight:800">${esc(r["總分"])}</td>
+            <td class="muted">${esc(r["場次"])}</td></tr>`;
+        }).join("");
+        out.innerHTML = `<div class="table-wrap"><table>
+          <thead><tr><th>名次</th><th>年級</th><th>班級</th><th>總積分</th><th>得分場次</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>`;
+      } catch (e) { out.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+    el("go").addEventListener("click", run);
+    document.addEventListener("DOMContentLoaded", run);
+    function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  </script>
+</body>
+</html>

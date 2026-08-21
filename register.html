@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>線上報名 · 右昌國小運動會</title>
+  <link rel="icon" href="assets/banner-small.jpg">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="register">
+  <main>
+    <section class="card">
+      <h2>個人資料</h2>
+      <div class="grid2">
+        <div>
+          <label>年級 *</label>
+          <select id="grade">
+            <option value="">請選擇</option>
+            <option>4年級</option><option>5年級</option><option>6年級</option>
+          </select>
+        </div>
+        <div>
+          <label>班級 *（例：4年1班）</label>
+          <input id="cls" placeholder="4年1班">
+        </div>
+        <div>
+          <label>座號 *</label>
+          <input id="seat" inputmode="numeric" placeholder="15">
+        </div>
+        <div>
+          <label>姓名 *</label>
+          <input id="name" placeholder="王小明">
+        </div>
+        <div>
+          <label>性別 *</label>
+          <select id="sex"><option value="">請選擇</option><option>男</option><option>女</option></select>
+        </div>
+        <div style="align-self:end">
+          <button class="btn ghost" id="checkBtn" type="button">查我已報名的項目</button>
+        </div>
+      </div>
+      <div id="mine"></div>
+    </section>
+
+    <section class="card">
+      <h2>選擇報名項目</h2>
+      <p class="muted">個人單項每人限報 <b id="maxTip">2</b> 項；大隊接力、趣味競賽不計入。
+        目前已選個人單項：<span id="counter" class="counter">0</span> 項。</p>
+      <div id="events"><p class="muted">請先選擇「年級」與「性別」，系統會列出可報名的項目。</p></div>
+      <div id="warn"></div>
+      <div style="margin-top:16px">
+        <button class="btn" id="submitBtn" type="button">送出報名</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    let EVENTS = [];
+    el("maxTip").textContent = CONFIG.maxIndividual;
+
+    async function loadEvents() {
+      const grade = el("grade").value, sex = el("sex").value;
+      const box = el("events");
+      if (!grade) { box.innerHTML = '<p class="muted">請先選擇「年級」。</p>'; return; }
+      box.innerHTML = '<p class="muted">載入項目中…</p>';
+      try {
+        const data = await apiGet("events", { grade });
+        EVENTS = data.events.filter(function (e) {
+          if (!sex) return true;
+          const g = String(e["性別"]);
+          return g === "混合" || g === sex || g === "";
+        });
+        renderEvents();
+      } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+
+    function renderEvents() {
+      const box = el("events");
+      if (!EVENTS.length) { box.innerHTML = '<p class="muted">此條件下暫無可報名項目。</p>'; return; }
+      const groups = { "個人單項": [], "大隊接力": [], "趣味競賽": [] };
+      EVENTS.forEach(function (e) { (groups[e["類別"]] || (groups[e["類別"]] = [])).push(e); });
+      let html = "";
+      Object.keys(groups).forEach(function (cat) {
+        if (!groups[cat].length) return;
+        html += `<h3 style="margin:14px 0 4px;color:var(--gold-d)">${cat}</h3><div class="events-grid">`;
+        html += groups[cat].map(function (e) {
+          const counts = String(e["計入限報"]) === "是";
+          const badge = counts ? '<span class="badge">計入</span>' : '<span class="badge no">不計入</span>';
+          return `<label class="ev" data-count="${counts ? 1 : 0}">
+            <input type="checkbox" value="${e["代碼"]}">
+            <span><span class="name">${esc(e["名稱"])}</span>${badge}
+            <br><span class="meta">${esc(e["組別"])} · ${esc(e["性別"])}</span></span></label>`;
+        }).join("");
+        html += `</div>`;
+      });
+      box.innerHTML = html;
+      box.querySelectorAll(".ev input").forEach(function (chk) {
+        chk.addEventListener("change", function () {
+          chk.closest(".ev").classList.toggle("checked", chk.checked);
+          updateCounter();
+        });
+      });
+      updateCounter();
+    }
+
+    function updateCounter() {
+      let n = 0;
+      document.querySelectorAll(".ev input:checked").forEach(function (chk) {
+        if (chk.closest(".ev").dataset.count === "1") n++;
+      });
+      const c = el("counter"); c.textContent = n;
+      const over = n > CONFIG.maxIndividual;
+      c.classList.toggle("over", over);
+      el("warn").innerHTML = over
+        ? `<div class="error">⚠ 個人單項已選 ${n} 項，超過上限 ${CONFIG.maxIndividual} 項！請取消部分項目才能送出。</div>` : "";
+      el("submitBtn").disabled = over;
+      return n;
+    }
+
+    async function checkMine() {
+      const grade = el("grade").value, cls = el("cls").value.trim(), seat = el("seat").value.trim();
+      const box = el("mine");
+      if (!grade || !cls || !seat) { toast("請先填年級、班級、座號", "err"); return; }
+      box.innerHTML = '<p class="muted">查詢中…</p>';
+      try {
+        const data = await apiGet("student", { grade, cls, seat });
+        if (!data.regs.length) { box.innerHTML = '<div class="notice">目前尚無報名紀錄。</div>'; return; }
+        box.innerHTML = '<div class="notice"><b>你已報名：</b>' +
+          data.regs.map(r => esc(r["項目名稱"]) + "（" + esc(r["類別"]) + "）").join("、") + "</div>";
+      } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+
+    async function submit() {
+      const payload = {
+        年級: el("grade").value, 班級: el("cls").value.trim(), 座號: el("seat").value.trim(),
+        姓名: el("name").value.trim(), 性別: el("sex").value,
+        codes: Array.from(document.querySelectorAll(".ev input:checked")).map(c => c.value),
+      };
+      if (!payload.年級 || !payload.班級 || !payload.座號 || !payload.姓名 || !payload.性別)
+        return toast("請完整填寫個人資料", "err");
+      if (!payload.codes.length) return toast("請至少勾選一個項目", "err");
+      if (updateCounter() > CONFIG.maxIndividual) return toast("個人單項超過上限", "err");
+
+      const btn = el("submitBtn"); setBusy(btn, true, "送出中…");
+      try {
+        const res = await apiPost("register", payload);
+        toast(res.msg, "ok");
+        el("warn").innerHTML = '<div class="notice">✅ ' + esc(res.msg) + '</div>';
+        document.querySelectorAll(".ev input:checked").forEach(c => { c.checked = false; c.closest(".ev").classList.remove("checked"); });
+        updateCounter(); checkMine();
+      } catch (e) {
+        el("warn").innerHTML = '<div class="error">' + esc(e.message) + '</div>';
+        toast(e.message, "err");
+      } finally { setBusy(btn, false); }
+    }
+
+    el("grade").addEventListener("change", loadEvents);
+    el("sex").addEventListener("change", loadEvents);
+    el("checkBtn").addEventListener("click", checkMine);
+    el("submitBtn").addEventListener("click", submit);
+    function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  </script>
+</body>
+</html>

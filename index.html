@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>右昌國小運動會</title>
+  <link rel="icon" href="assets/banner-small.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="home">
+  <main>
+    <section class="tiles">
+      <a class="tile" href="register.html"><div class="ico">📝</div><div class="t">線上報名</div><div class="d">個人單項 · 每人限 2 項</div></a>
+      <a class="tile" href="query.html"><div class="ico">🔍</div><div class="t">成績查詢</div><div class="d">依項目 / 班級 / 姓名</div></a>
+      <a class="tile" href="ranking.html"><div class="ico">🏆</div><div class="t">班級積分</div><div class="d">即時排行榜</div></a>
+      <a class="tile" href="score.html"><div class="ico">⌨️</div><div class="t">成績輸入</div><div class="d">體育老師專用</div></a>
+    </section>
+
+    <section class="card">
+      <h2>最新公告</h2>
+      <div id="ann"><p class="muted">載入中…</p></div>
+    </section>
+
+    <section class="card">
+      <h2>活動說明</h2>
+      <p>本屆運動會競賽以 <b>四、五、六年級</b> 為主。個人單項每人限報 <b>2 項</b>（大隊接力、趣味競賽不計入）。</p>
+      <p class="muted">積分規則：第 1 名 7 分、第 2 名 5 分、第 3 名 4 分、第 4 名 3 分、第 5 名 2 分、第 6 名 1 分。</p>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    (async function () {
+      const box = el("ann");
+      try {
+        const data = await apiGet("announcements");
+        if (!data.announcements.length) { box.innerHTML = '<p class="muted">目前尚無公告。</p>'; return; }
+        box.innerHTML = data.announcements.map(function (a) {
+          const pin = String(a["置頂"]) === "是" ? '<span class="pin">📌 置頂</span>' : "";
+          return `<div class="ann"><div class="date">${fmtDate(a["日期"])}</div>
+                  <div class="title">${esc(a["標題"])}${pin}</div>
+                  <div>${esc(a["內容"])}</div></div>`;
+        }).join("");
+      } catch (e) {
+        box.innerHTML = '<p class="muted">' + esc(e.message) + '</p>';
+      }
+    })();
+    function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+    function fmtDate(d){ if(!d) return ""; try{return new Date(d).toLocaleDateString("zh-TW");}catch(e){return String(d);} }
+  </script>
+</body>
+</html>

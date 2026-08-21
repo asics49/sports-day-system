@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>成績查詢 · 右昌國小運動會</title>
+  <link rel="icon" href="assets/banner-small.jpg">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="query">
+  <main>
+    <section class="card">
+      <h2>成績查詢</h2>
+      <div class="row">
+        <div style="flex:1;min-width:150px">
+          <label>年級</label>
+          <select id="grade"><option value="">全部</option><option>4年級</option><option>5年級</option><option>6年級</option></select>
+        </div>
+        <div style="flex:1;min-width:150px">
+          <label>項目</label>
+          <select id="code"><option value="">全部項目</option></select>
+        </div>
+        <div style="flex:1;min-width:120px">
+          <label>班級</label>
+          <input id="cls" placeholder="4年1班">
+        </div>
+        <div style="flex:1;min-width:120px">
+          <label>姓名</label>
+          <input id="name" placeholder="王小明">
+        </div>
+        <div><button class="btn" id="go" type="button">查詢</button></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>查詢結果</h2>
+      <div id="out"><p class="muted">請設定條件後按「查詢」。</p></div>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    (async function fillEvents() {
+      try {
+        const data = await apiGet("events");
+        const sel = el("code");
+        data.events.forEach(function (e) {
+          const o = document.createElement("option");
+          o.value = e["代碼"]; o.textContent = e["名稱"] + "（" + e["組別"] + " " + e["性別"] + "）";
+          sel.appendChild(o);
+        });
+      } catch (e) {}
+    })();
+
+    async function run() {
+      const out = el("out"); out.innerHTML = '<p class="muted">查詢中…</p>';
+      try {
+        const data = await apiGet("query", {
+          grade: el("grade").value, code: el("code").value,
+          cls: el("cls").value.trim(), name: el("name").value.trim(),
+        });
+        if (!data.results.length) { out.innerHTML = '<div class="notice">查無成績。</div>'; return; }
+        let rows = data.results.map(function (r) {
+          const rk = Number(r["名次"]);
+          const cls = rk <= 3 ? "rank" + rk : "";
+          return `<tr>
+            <td>${esc(r["項目名稱"])}</td><td>${esc(r["組別"])}</td>
+            <td class="${cls}">${rk}</td><td>${esc(r["班級"])}</td>
+            <td>${esc(r["姓名"])}</td><td>${esc(r["得分"])}</td></tr>`;
+        }).join("");
+        out.innerHTML = `<div class="table-wrap"><table>
+          <thead><tr><th>項目</th><th>組別</th><th>名次</th><th>班級</th><th>姓名</th><th>得分</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>`;
+      } catch (e) { out.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+    el("go").addEventListener("click", run);
+    function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  </script>
+</body>
+</html>
