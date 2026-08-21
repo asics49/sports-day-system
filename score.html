@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <script src="https://accounts.google.com/gsi/client" async></script>
+  <script src="js/vendor/xlsx.full.min.js"></script>
 </head>
 <body data-page="score">
   <main>
@@ -42,6 +43,18 @@
       <select id="code"><option value="">請選擇項目</option></select>
 
       <div id="area" style="margin-top:14px"></div>
+    </section>
+
+    <!-- Excel 匯入成績 -->
+    <section class="card" id="importCard" style="display:none">
+      <h2>Excel 匯入成績</h2>
+      <p class="muted">格式：每一列一筆成績，欄位順序 <b>項目名稱｜組別｜性別｜名次｜班級｜姓名｜紀錄</b>（第一列為標題）。
+        組別填「4年級/5年級/6年級」，得分由名次自動換算，匯入為<b>附加</b>（不覆蓋原有成績）。</p>
+      <div class="row">
+        <button class="btn ghost" id="s_tpl" type="button">下載範例格式</button>
+        <input type="file" id="s_file" accept=".xlsx,.xls,.csv" style="max-width:320px">
+      </div>
+      <div id="s_preview" style="margin-top:12px"></div>
     </section>
   </main>
 
@@ -106,6 +119,7 @@
     function showPanel() {
       el("loginCard").style.display = "none";
       el("panel").style.display = "block";
+      el("importCard").style.display = "block";
       el("who").textContent = AUTH.name + "（" + (AUTH.role === "admin" ? "管理者" : "老師") + "）";
       fillEvents();
     }
@@ -209,10 +223,78 @@
       } catch (e) { toast(e.message, "err"); }
     }
 
+    /* ---- Excel 匯入成績 ---- */
+    let IMP_ROWS = [];
+    function normGrade(g){ g=String(g).trim(); return /年級/.test(g)?g:(g?g+"年級":""); }
+    function findEvent(name, grade, sex){
+      name=String(name).trim(); grade=normGrade(grade); sex=String(sex).trim();
+      const m = EVENTS.filter(e => String(e["名稱"]).trim()===name
+        && (String(e["組別"])===grade || String(e["組別"])==="全校")
+        && (String(e["性別"])===sex || String(e["性別"])==="混合"));
+      return m.length===1 ? m[0] : null;
+    }
+    function readSheetFile(file){
+      return new Promise(function(resolve,reject){
+        const fr=new FileReader();
+        fr.onload=function(e){ try{ const wb=XLSX.read(e.target.result,{type:"array"});
+          resolve(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""})); }catch(err){reject(err);} };
+        fr.onerror=reject; fr.readAsArrayBuffer(file);
+      });
+    }
+    async function onScoreFile(ev){
+      const f=ev.target.files[0]; if(!f) return;
+      let raw; try{ raw=await readSheetFile(f); }catch(e){ return toast("讀檔失敗："+e.message,"err"); }
+      IMP_ROWS = raw.map(function(r){
+        const 名稱=r["項目名稱"]||r["項目"], 組別=r["組別"]||r["年級"], 性別=r["性別"], 名次=r["名次"], 班級=r["班級"], 姓名=r["姓名"], 紀錄=r["紀錄"]||r["成績"]||"";
+        const e=findEvent(名稱, 組別, 性別);
+        return {名稱,組別:normGrade(組別),性別,名次,班級:String(班級||""),姓名:String(姓名||""),紀錄:String(紀錄||""),
+                代碼: e?e["代碼"]:"", ok: !!e && !!Number(名次)};
+      }).filter(r=>r.名稱 || r.班級);
+      renderImpPreview();
+    }
+    function renderImpPreview(){
+      const box=el("s_preview");
+      if(!IMP_ROWS.length){ box.innerHTML='<div class="error">讀不到有效資料，請檢查欄位標題。</div>'; return; }
+      const bad=IMP_ROWS.filter(r=>!r.ok).length;
+      const rows=IMP_ROWS.map(function(r){
+        const cls=r.ok?'':'style="background:#fdecea"';
+        const st=r.ok?'OK':(!r.代碼?'<span class="rank1">找不到項目</span>':'<span class="rank1">名次無效</span>');
+        return `<tr ${cls}><td>${esc(r.名稱)}</td><td>${esc(r.組別)} ${esc(r.性別)}</td><td>${esc(r.名次)}</td>
+          <td>${esc(r.班級)}</td><td>${esc(r.姓名)}</td><td>${esc(r.紀錄)}</td><td>${st}</td></tr>`;
+      }).join("");
+      box.innerHTML=`<div class="notice">共 ${IMP_ROWS.length} 筆，可匯入 <b>${IMP_ROWS.length-bad}</b> 筆${bad?('，<b class="rank1">'+bad+'</b> 筆有問題（不匯入）'):''}。</div>
+        <div class="table-wrap"><table><thead><tr><th>項目</th><th>組別</th><th>名次</th><th>班級</th><th>姓名</th><th>紀錄</th><th>狀態</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+        <div style="margin-top:12px"><button class="btn" id="s_import" type="button">確認匯入</button></div>`;
+      el("s_import").addEventListener("click", doScoreImport);
+    }
+    async function doScoreImport(){
+      const rows=IMP_ROWS.filter(r=>r.ok).map(r=>({代碼:r.代碼,名次:r.名次,年級:r.組別,班級:r.班級,姓名:r.姓名,紀錄:r.紀錄}));
+      if(!rows.length) return toast("沒有可匯入的成績","err");
+      const b=el("s_import"); setBusy(b,true,"匯入中…");
+      try{
+        const res=await apiPost("importScores",{token:AUTH.token, rows});
+        toast("匯入完成：新增 "+res.added+" 筆成績","ok");
+        el("s_preview").innerHTML += '<div class="notice">✅ 已匯入 '+res.added+' 筆。</div>';
+      }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
+      finally{ setBusy(b,false); }
+    }
+    function downloadScoreTemplate(){
+      const ws=XLSX.utils.aoa_to_sheet([
+        ["項目名稱","組別","性別","名次","班級","姓名","紀錄"],
+        ["100公尺","5年級","男","1","5年1班","王小明","13.2秒"],
+        ["100公尺","5年級","男","2","5年3班","李大同","13.8秒"],
+        ["跳遠","5年級","女","1","5年2班","林小美","3.25公尺"]
+      ]);
+      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"成績"); XLSX.writeFile(wb,"成績匯入範例.xlsx");
+    }
+
     el("loginBtn").addEventListener("click", login);
     el("pw").addEventListener("keydown", e => { if (e.key === "Enter") login(); });
     el("logoutBtn").addEventListener("click", () => { clearAuth(); location.reload(); });
     el("code").addEventListener("change", onPickEvent);
+    el("s_file").addEventListener("change", onScoreFile);
+    el("s_tpl").addEventListener("click", downloadScoreTemplate);
 
     loadAuth();
     document.addEventListener("DOMContentLoaded", function () {

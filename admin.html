@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>管理 · 右昌國小運動會</title>
+  <link rel="icon" href="assets/banner-small.jpg">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <script src="js/vendor/xlsx.full.min.js"></script>
+</head>
+<body data-page="admin">
+  <main>
+    <!-- 登入 -->
+    <section class="card" id="loginCard">
+      <h2>管理登入</h2>
+      <p class="muted">管理者 / 體育老師專用。可用 Google 帳號登入，或用管理者帳密。</p>
+      <div id="gbtn"></div>
+      <div id="gTip" class="muted" style="font-size:13px;margin-top:8px"></div>
+      <details style="margin-top:16px">
+        <summary style="cursor:pointer;font-weight:600;color:var(--gold-d)">改用管理者帳號 / 密碼登入</summary>
+        <div class="grid2" style="margin-top:10px">
+          <div><label>帳號</label><input id="email" placeholder="admin@youchang" autocomplete="username"></div>
+          <div><label>密碼</label><input id="pw" type="password" autocomplete="current-password"></div>
+        </div>
+        <div style="margin-top:12px"><button class="btn ghost" id="loginBtn" type="button">登入</button></div>
+      </details>
+      <div id="loginMsg"></div>
+    </section>
+
+    <section class="card" id="whoCard" style="display:none">
+      <div class="row" style="justify-content:space-between">
+        <div class="muted">已登入：<b id="who"></b></div>
+        <button class="btn ghost" id="logoutBtn" type="button">登出</button>
+      </div>
+    </section>
+
+    <!-- 發布公告 -->
+    <section class="card panel" style="display:none">
+      <h2>發布公告</h2>
+      <div class="grid2">
+        <div><label>日期</label><input id="a_date" type="date"></div>
+        <div><label>置頂</label><select id="a_pin"><option value="">否</option><option value="是">是（置頂）</option></select></div>
+      </div>
+      <label>標題 *</label><input id="a_title" placeholder="例：報名開始">
+      <label>內容</label><textarea id="a_body" rows="3" placeholder="公告內容…"></textarea>
+      <div style="margin-top:12px"><button class="btn" id="a_pub" type="button">發布公告</button></div>
+      <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+      <h3 style="color:var(--gold-d)">目前公告</h3>
+      <div id="a_list"><p class="muted">載入中…</p></div>
+    </section>
+
+    <!-- 匯入報名 -->
+    <section class="card panel" style="display:none">
+      <h2>Excel 匯入報名</h2>
+      <p class="muted">格式：每一列一筆報名，欄位順序 <b>年級｜班級｜座號｜姓名｜性別｜項目名稱</b>（第一列為標題）。
+        系統會逐位學生檢查個人單項數，<b>超過 <span id="maxTip">2</span> 項（報到第 3 項）者會標紅、不匯入</b>。</p>
+      <div class="row">
+        <button class="btn ghost" id="r_tpl" type="button">下載範例格式</button>
+        <input type="file" id="r_file" accept=".xlsx,.xls,.csv" style="max-width:320px">
+      </div>
+      <div id="r_preview" style="margin-top:12px"></div>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    const AUTH_KEY = "yc_auth";
+    let AUTH = null, EVENTS = [], REG_ROWS = [];
+    el("maxTip").textContent = CONFIG.maxIndividual;
+    el("a_date").value = new Date().toISOString().slice(0, 10);
+
+    function loadAuth(){ try{AUTH=JSON.parse(localStorage.getItem(AUTH_KEY));}catch(e){AUTH=null;} }
+    function saveAuth(a){ AUTH=a; localStorage.setItem(AUTH_KEY, JSON.stringify(a)); }
+    function clearAuth(){ AUTH=null; localStorage.removeItem(AUTH_KEY); }
+
+    /* ---- 登入 ---- */
+    function initGoogle(t){ t=t||0;
+      if(!CONFIG.GOOGLE_CLIENT_ID){ el("gTip").innerHTML="（尚未設定 Google 登入，請用下方管理者帳密）"; return; }
+      if(!window.google||!google.accounts||!google.accounts.id){ if(t<20) return setTimeout(()=>initGoogle(t+1),300); return; }
+      google.accounts.id.initialize({client_id:CONFIG.GOOGLE_CLIENT_ID, callback:onGoogle});
+      google.accounts.id.renderButton(el("gbtn"),{theme:"filled_blue",size:"large",text:"signin_with",shape:"pill",locale:"zh_TW",width:280});
+    }
+    async function onGoogle(resp){ el("gTip").textContent="驗證中…";
+      try{ const r=await apiPost("googleLogin",{credential:resp.credential}); saveAuth(r); el("gTip").textContent=""; showPanels(); toast("登入成功："+r.name,"ok"); }
+      catch(e){ el("gTip").textContent=""; el("loginMsg").innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
+    }
+    async function login(){
+      const email=el("email").value.trim(), pw=el("pw").value;
+      if(!email||!pw) return toast("請輸入帳號與密碼","err");
+      const b=el("loginBtn"); setBusy(b,true,"登入中…");
+      try{ const r=await apiPost("login",{email,password:pw}); saveAuth(r); el("loginMsg").innerHTML=""; showPanels(); toast("登入成功","ok"); }
+      catch(e){ el("loginMsg").innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
+      finally{ setBusy(b,false); }
+    }
+
+    function showPanels(){
+      el("loginCard").style.display="none";
+      el("whoCard").style.display="block";
+      document.querySelectorAll(".panel").forEach(p=>p.style.display="block");
+      el("who").textContent = AUTH.name + "（" + (AUTH.role==="admin"?"管理者":"老師") + "）";
+      loadEvents(); loadAnn();
+    }
+
+    async function loadEvents(){ try{ const d=await apiGet("events"); EVENTS=d.events; }catch(e){} }
+
+    /* ---- 公告 ---- */
+    async function loadAnn(){
+      const box=el("a_list");
+      try{
+        const d=await apiGet("announcements");
+        if(!d.announcements.length){ box.innerHTML='<p class="muted">目前尚無公告。</p>'; return; }
+        box.innerHTML = d.announcements.map(function(a){
+          const pin = String(a["置頂"])==="是" ? '<span class="pin">📌</span>' : "";
+          return `<div class="ann" style="display:flex;justify-content:space-between;gap:10px;align-items:start">
+            <div><div class="date">${fmtDate(a["日期"])} ${pin}</div><div class="title">${esc(a["標題"])}</div><div class="muted">${esc(a["內容"])}</div></div>
+            <button class="btn red" style="padding:5px 12px;flex:0 0 auto" onclick='delAnn(${JSON.stringify(String(a["標題"]))},${JSON.stringify(String(a["內容"]||""))})'>刪除</button>
+          </div>`;
+        }).join("");
+      }catch(e){ box.innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
+    }
+    async function publishAnn(){
+      const title=el("a_title").value.trim();
+      if(!title) return toast("請填標題","err");
+      const b=el("a_pub"); setBusy(b,true,"發布中…");
+      try{
+        await apiPost("addAnnouncement",{token:AUTH.token, 日期:el("a_date").value, 標題:title, 內容:el("a_body").value.trim(), 置頂:el("a_pin").value});
+        toast("公告已發布","ok"); el("a_title").value=""; el("a_body").value=""; loadAnn();
+      }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
+      finally{ setBusy(b,false); }
+    }
+    window.delAnn = async function(title, body){
+      if(!confirm("確定刪除這則公告？")) return;
+      try{ await apiPost("deleteAnnouncement",{token:AUTH.token, 標題:title, 內容:body}); toast("已刪除","ok"); loadAnn(); }
+      catch(e){ toast(e.message,"err"); }
+    };
+
+    /* ---- 匯入報名 ---- */
+    function normGrade(g){ g=String(g).trim(); return /年級/.test(g)?g:(g?g+"年級":""); }
+    function findEventByName(name, grade, sex){
+      name=String(name).trim(); grade=normGrade(grade); sex=String(sex).trim();
+      const m = EVENTS.filter(e => String(e["名稱"]).trim()===name
+        && (String(e["組別"])===grade || String(e["組別"])==="全校")
+        && (String(e["性別"])===sex || String(e["性別"])==="混合"));
+      return m.length===1 ? m[0] : null;
+    }
+    async function onRegFile(ev){
+      const f=ev.target.files[0]; if(!f) return;
+      const rows = await readSheetFile(f);   // 陣列，每列物件（依標題）
+      // 分組成學生
+      const map={};
+      const order=[];
+      rows.forEach(function(r){
+        const 年級=r["年級"], 班級=r["班級"], 座號=r["座號"], 姓名=r["姓名"], 性別=r["性別"], 項目=r["項目名稱"]||r["項目"];
+        if(!年級||!班級||!座號||!項目) return;
+        const key=年級+"|"+班級+"|"+座號;
+        if(!map[key]){ map[key]={年級:normGrade(年級),班級:String(班級),座號:String(座號),姓名:String(姓名||""),性別:String(性別||""),items:[]}; order.push(key); }
+        map[key].items.push(String(項目).trim());
+      });
+      // 解析項目→代碼，計個人單項
+      REG_ROWS = order.map(function(k){
+        const s=map[k]; const codes=[]; const unresolved=[]; let indiv=0;
+        s.items.forEach(function(nm){
+          const e=findEventByName(nm, s.年級, s.性別);
+          if(!e){ unresolved.push(nm); return; }
+          codes.push(e["代碼"]);
+          if(String(e["計入限報"])==="是") indiv++;
+        });
+        const over = indiv > CONFIG.maxIndividual;
+        return {年級:s.年級,班級:s.班級,座號:s.座號,姓名:s.姓名,性別:s.性別,codes,indiv,over,unresolved,items:s.items};
+      });
+      renderRegPreview();
+    }
+    function renderRegPreview(){
+      const box=el("r_preview");
+      if(!REG_ROWS.length){ box.innerHTML='<div class="error">讀不到有效資料，請檢查欄位標題。</div>'; return; }
+      const overN = REG_ROWS.filter(r=>r.over).length;
+      const rows = REG_ROWS.map(function(r){
+        const cls = r.over ? 'style="background:#fdecea"' : (r.unresolved.length?'style="background:#fff4e0"':'');
+        const note = r.over ? `<span class="rank1">⚠ 超額 ${r.indiv} 項，不匯入</span>` :
+                     (r.unresolved.length? `<span style="color:#8a5a10">找不到項目：${esc(r.unresolved.join("、"))}</span>` : "OK");
+        return `<tr ${cls}><td>${esc(r.班級)}</td><td>${esc(r.座號)}</td><td>${esc(r.姓名)}</td>
+          <td>${esc(r.items.join("、"))}</td><td style="text-align:center">${r.indiv}</td><td>${note}</td></tr>`;
+      }).join("");
+      box.innerHTML = `<div class="notice">共 ${REG_ROWS.length} 位學生，其中 <b class="${overN?'rank1':''}">${overN}</b> 位超額（不會匯入）。</div>
+        <div class="table-wrap"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th><th>報名項目</th><th>個人單項</th><th>狀態</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+        <div style="margin-top:12px"><button class="btn" id="r_import" type="button">確認匯入（略過超額者）</button></div>`;
+      el("r_import").addEventListener("click", doRegImport);
+    }
+    async function doRegImport(){
+      const students = REG_ROWS.filter(r=>!r.over && r.codes.length).map(r=>({年級:r.年級,班級:r.班級,座號:r.座號,姓名:r.姓名,性別:r.性別,codes:r.codes}));
+      if(!students.length) return toast("沒有可匯入的資料","err");
+      const b=el("r_import"); setBusy(b,true,"匯入中…");
+      try{
+        const res=await apiPost("importReg",{token:AUTH.token, students});
+        toast("匯入完成：新增 "+res.addedTotal+" 筆報名，超額略過 "+res.overCount+" 位","ok");
+        el("r_preview").innerHTML += '<div class="notice">✅ 已匯入 '+res.addedTotal+' 筆。</div>';
+      }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
+      finally{ setBusy(b,false); }
+    }
+    function downloadRegTemplate(){
+      const ws = XLSX.utils.aoa_to_sheet([
+        ["年級","班級","座號","姓名","性別","項目名稱"],
+        ["5年級","5年1班","1","王小明","男","100公尺"],
+        ["5年級","5年1班","1","王小明","男","跳遠"],
+        ["5年級","5年2班","8","林小美","女","60公尺"]
+      ]);
+      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"報名");
+      XLSX.writeFile(wb,"報名匯入範例.xlsx");
+    }
+
+    /* ---- 共用：讀 Excel/CSV ---- */
+    function readSheetFile(file){
+      return new Promise(function(resolve,reject){
+        const fr=new FileReader();
+        fr.onload=function(e){
+          try{
+            const wb=XLSX.read(e.target.result,{type:"array"});
+            const ws=wb.Sheets[wb.SheetNames[0]];
+            resolve(XLSX.utils.sheet_to_json(ws,{defval:""}));
+          }catch(err){ reject(err); }
+        };
+        fr.onerror=reject; fr.readAsArrayBuffer(file);
+      });
+    }
+
+    el("loginBtn").addEventListener("click", login);
+    el("pw").addEventListener("keydown", e=>{ if(e.key==="Enter") login(); });
+    el("logoutBtn").addEventListener("click", ()=>{ clearAuth(); location.reload(); });
+    el("a_pub").addEventListener("click", publishAnn);
+    el("r_file").addEventListener("change", onRegFile);
+    el("r_tpl").addEventListener("click", downloadRegTemplate);
+
+    loadAuth();
+    document.addEventListener("DOMContentLoaded", function(){ if(AUTH&&AUTH.token) showPanels(); else initGoogle(); });
+    function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function fmtDate(d){ if(!d) return ""; try{return new Date(d).toLocaleDateString("zh-TW");}catch(e){return String(d);} }
+  </script>
+</body>
+</html>
