@@ -1,6 +1,9 @@
 # 後端程式含密鑰，不放公開 repo（已部署在 Apps Script，本機保留即可）
 apps-script/
 
+# 建置紀錄，含密碼/密鑰/ID 等敏感資訊，只留本機
+CLAUDE.md
+
 # Google Drive 產生的捷徑/暫存檔
 *.gsheet
 *.gdoc
