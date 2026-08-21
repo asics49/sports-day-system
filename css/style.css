@@ -32,10 +32,9 @@ h1, h2, h3 { line-height: 1.3; }
 .site-header { background: #fff; box-shadow: var(--shadow); }
 .banner {
   position: relative;
+  width: 100%;
+  height: clamp(150px, 26vw, 380px);   /* 滿版寬度，高度隨螢幕縮放 */
   background: #fff url("../assets/banner.jpg") center/cover no-repeat;
-  aspect-ratio: 2000 / 600;
-  max-height: 340px;
-  min-height: 150px;
 }
 .banner-text {
   position: absolute; left: 0; right: 0; bottom: 0;
