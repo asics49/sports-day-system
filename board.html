@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>即時成績公布 · 右昌國小運動會</title>
+  <link rel="icon" href="assets/banner-small.jpg">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .board-bar { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
+    .board-bar > div { flex:1; min-width:150px; }
+    .board-title { text-align:center; margin:6px 0 4px; }
+    .board-title h2 { font-size:clamp(22px,4vw,40px); color:var(--gold-d); margin:0; justify-content:center; }
+    .board-title h2::before { display:none; }
+    .board-sub { text-align:center; color:var(--muted); margin-bottom:10px; font-size:clamp(13px,1.6vw,18px); }
+    table.board { font-size:clamp(15px,2vw,26px); }
+    table.board th { font-size:clamp(13px,1.5vw,20px); }
+    table.board td, table.board th { padding:clamp(8px,1.4vw,18px) clamp(8px,1.2vw,16px); }
+    .rk { font-weight:900; text-align:center; width:1%; white-space:nowrap; }
+    .rk .medal { font-size:1.4em; }
+    tr.top1 { background:#fff8e6; }
+    tr.top2 { background:#f7f7f7; }
+    tr.top3 { background:#fbf3ea; }
+    .refresh-row { display:flex; justify-content:center; align-items:center; gap:14px; margin-top:12px; color:var(--muted); font-size:14px; flex-wrap:wrap; }
+    .dot { width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block; animation:blink 1.4s infinite; }
+    @keyframes blink { 50%{opacity:.25} }
+    .fs-btn { cursor:pointer; }
+  </style>
+</head>
+<body data-page="board">
+  <main>
+    <section class="card">
+      <div class="board-bar">
+        <div>
+          <label>年級</label>
+          <select id="grade"><option value="">全部</option><option>4年級</option><option>5年級</option><option>6年級</option></select>
+        </div>
+        <div>
+          <label>項目</label>
+          <select id="code"><option value="">請選擇項目</option></select>
+        </div>
+        <div style="flex:0 0 auto">
+          <label>&nbsp;</label>
+          <button class="btn ghost fs-btn" id="fsBtn" type="button">🔳 全螢幕</button>
+        </div>
+      </div>
+      <div class="refresh-row">
+        <label style="margin:0;display:flex;align-items:center;gap:6px"><input type="checkbox" id="auto" checked style="width:auto"> 自動更新</label>
+        <span><span class="dot"></span> 每 <b>15</b> 秒重新整理　下次：<b id="cd">–</b> 秒</span>
+        <button class="btn ghost" id="now" type="button" style="padding:6px 14px">立即更新</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="board-title"><h2 id="bt">即時成績公布</h2></div>
+      <div class="board-sub" id="bs">請選擇上方項目</div>
+      <div id="out"></div>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    let EVENTS = [], timer = null, cd = 15;
+
+    (async function fillEvents() {
+      try {
+        const data = await apiGet("events");
+        EVENTS = data.events;
+        renderCodeOptions();
+      } catch (e) { el("out").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    })();
+
+    function renderCodeOptions() {
+      const grade = el("grade").value;
+      const sel = el("code"); const cur = sel.value;
+      sel.innerHTML = '<option value="">請選擇項目</option>';
+      EVENTS.filter(function (e) {
+        return !grade || e["組別"] == grade || e["組別"] == "全校" || String(e["組別"]).indexOf(grade) >= 0;
+      }).forEach(function (e) {
+        const o = document.createElement("option");
+        o.value = e["代碼"]; o.textContent = e["名稱"] + "（" + e["組別"] + " " + e["性別"] + "）";
+        if (e["代碼"] == cur) o.selected = true;
+        sel.appendChild(o);
+      });
+    }
+
+    async function load() {
+      const code = el("code").value;
+      if (!code) { el("bt").textContent = "即時成績公布"; el("bs").textContent = "請選擇上方項目"; el("out").innerHTML = ""; return; }
+      const ev = EVENTS.find(function (e) { return e["代碼"] == code; }) || {};
+      el("bt").textContent = ev["名稱"] || "成績";
+      el("bs").textContent = (ev["組別"] || "") + "　" + (ev["性別"] || "");
+      try {
+        const data = await apiGet("query", { code });
+        const rows = data.results.slice().sort(function (a, b) { return (a["名次"] || 99) - (b["名次"] || 99); });
+        if (!rows.length) { el("out").innerHTML = '<div class="notice" style="text-align:center;font-size:clamp(15px,2vw,22px)">此項目尚未公布成績</div>'; return; }
+        const medal = ["🥇","🥈","🥉"];
+        const body = rows.map(function (r) {
+          const rk = Number(r["名次"]);
+          const cls = rk <= 3 ? "top" + rk : "";
+          const m = rk <= 3 ? '<span class="medal">' + medal[rk - 1] + '</span> ' : "";
+          return `<tr class="${cls}">
+            <td class="rk rank${rk<=3?rk:''}">${m}${rk}</td>
+            <td>${esc(r["班級"])}</td>
+            <td>${esc(r["姓名"])}</td>
+            <td>${esc(r["紀錄"] || "")}</td>
+            <td style="text-align:center">${esc(r["得分"])}</td></tr>`;
+        }).join("");
+        el("out").innerHTML = `<div class="table-wrap"><table class="board">
+          <thead><tr><th class="rk">名次</th><th>班級</th><th>姓名</th><th>紀錄</th><th style="text-align:center">得分</th></tr></thead>
+          <tbody>${body}</tbody></table></div>`;
+      } catch (e) { el("out").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+
+    function tick() {
+      if (!el("auto").checked || !el("code").value) { el("cd").textContent = "–"; return; }
+      cd--; el("cd").textContent = cd;
+      if (cd <= 0) { cd = 15; load(); }
+    }
+
+    el("grade").addEventListener("change", renderCodeOptions);
+    el("code").addEventListener("change", function () { cd = 15; load(); });
+    el("now").addEventListener("click", function () { cd = 15; load(); });
+    el("fsBtn").addEventListener("click", function () {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+      else document.exitFullscreen && document.exitFullscreen();
+    });
+    timer = setInterval(tick, 1000);
+
+    function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  </script>
+</body>
+</html>

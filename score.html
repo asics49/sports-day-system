@@ -148,7 +148,7 @@
         ? `<p class="notice">此項目共 ${REG.length} 人報名。可從下拉選擇報名者自動帶入班級/姓名，或手動輸入（大隊接力、趣味競賽請直接填班級）。</p>`
         : `<p class="notice">此項目尚無報名資料，請手動填入班級。</p>`;
 
-      html += '<div class="table-wrap"><table><thead><tr><th>名次</th><th>選報名者</th><th>年級</th><th>班級</th><th>姓名</th><th>得分</th></tr></thead><tbody>';
+      html += '<div class="table-wrap"><table><thead><tr><th>名次</th><th>選報名者</th><th>年級</th><th>班級</th><th>姓名</th><th>紀錄</th><th>得分</th></tr></thead><tbody>';
       for (let rank = 1; rank <= n; rank++) {
         const ex = byRank[rank] || {};
         html += `<tr data-rank="${rank}">
@@ -157,6 +157,7 @@
           <td><select class="g"><option value=""></option><option ${ex["年級"] == "4年級" ? "selected" : ""}>4年級</option><option ${ex["年級"] == "5年級" ? "selected" : ""}>5年級</option><option ${ex["年級"] == "6年級" ? "selected" : ""}>6年級</option></select></td>
           <td><input class="c" value="${esc(ex["班級"] || "")}" placeholder="4年1班"></td>
           <td><input class="nm" value="${esc(ex["姓名"] || "")}" placeholder="姓名"></td>
+          <td><input class="rec" value="${esc(ex["紀錄"] || "")}" placeholder="秒 / 公尺" style="min-width:90px"></td>
           <td class="sc">${CONFIG.scoreTable[rank - 1]}</td></tr>`;
       }
       html += '</tbody></table></div>';
@@ -186,7 +187,7 @@
         const cls = tr.querySelector(".c").value.trim();
         const nm = tr.querySelector(".nm").value.trim();
         if (!cls && !nm) return;                    // 空白列略過
-        rows.push({ 名次: Number(tr.dataset.rank), 年級: tr.querySelector(".g").value, 班級: cls, 姓名: nm });
+        rows.push({ 名次: Number(tr.dataset.rank), 年級: tr.querySelector(".g").value, 班級: cls, 姓名: nm, 紀錄: tr.querySelector(".rec").value.trim() });
       });
       if (!rows.length) return toast("請至少填一列成績", "err");
       const btn = el("saveBtn"); setBusy(btn, true, "儲存中…");

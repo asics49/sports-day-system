@@ -6,6 +6,7 @@
 const NAV = [
   { href: "index.html",    label: "首頁 / 公告", key: "home" },
   { href: "register.html", label: "線上報名",   key: "register" },
+  { href: "board.html",    label: "即時成績公布", key: "board" },
   { href: "query.html",    label: "成績查詢",   key: "query" },
   { href: "ranking.html",  label: "班級積分",   key: "ranking" },
   { href: "score.html",    label: "成績輸入",   key: "score" },
