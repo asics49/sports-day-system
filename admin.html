@@ -174,6 +174,7 @@
           const 座號=String(r["座號"]||"").trim();
           const 姓名=String(r["姓名"]||"").trim();
           if(!班別 || !姓名) return;
+          if(/範例|說明|請刪除/.test(班別) || /範例|請刪除/.test(姓名)) return;  // 略過範例/說明列
           const joined=cols.filter(c=>String(r[c.h]||"").trim()!=="");
           if(!joined.length) return;
           const key=grade+"|"+班別+"|"+座號+"|"+姓名;
@@ -232,22 +233,35 @@
     function downloadRegTemplate(){
       if(!EVENTS.length) return toast("項目資料載入中，請稍候再試","err");
       const wb=XLSX.utils.book_new();
+      // 填寫說明頁
+      const help=[
+        ["右昌國小運動會 — 報名匯入填寫說明"],
+        [""],
+        ["1. 本檔有『4年級／5年級／6年級』三個工作表，請在對應年級的工作表填寫。"],
+        ["2. 一位選手一列：填 班別、座號、姓名，再在他報名的項目欄位打 V（或任何符號）。"],
+        ["3. 每人最多報 2 個個人單項；每個項目同班最多 2 人。"],
+        ["4. 各工作表已放兩列『範例－』開頭的示範列，照著填即可；可刪除，不刪也沒關係（系統會自動略過『範例』字樣的列）。"],
+        ["5. 從範例列下方接著填你們班的選手。"],
+        ["6. 大隊接力／趣味競賽不在此表，另行處理。"],
+        [""],
+        ["填好後到網站上傳，系統會顯示預覽並檢查超額，確認後匯入。"]
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(help), "填寫說明");
+      // 各年級工作表
       [["4","4年級"],["5","5年級"],["6","6年級"]].forEach(function(g){
         const evs=EVENTS.filter(e=>String(e["組別"])===g[1] && String(e["類別"])==="個人單項" && String(e["啟用"])==="是");
         const headers=evs.map(e=>(e["性別"]==="男"?"男生":e["性別"]==="女"?"女生":"")+e["名稱"]);
         const head=["班別","座號","姓名"].concat(headers);
         const blank=headers.map(()=>"");
-        // 範例：兩位選手各報 2 項
         const ex1=blank.slice(); if(headers.length){ex1[0]="V";} if(headers.length>2){ex1[2]="V";}
         const ex2=blank.slice(); if(headers.length>1){ex2[1]="V";}
         const aoa=[head,
-          [g[0]+"年1班","15","王小明"].concat(ex1),
-          [g[0]+"年2班","8","林小美"].concat(ex2)
+          [g[0]+"年1班","15","範例－王小明"].concat(ex1),
+          [g[0]+"年2班","8","範例－林小美"].concat(ex2)
         ];
-        const ws=XLSX.utils.aoa_to_sheet(aoa);
-        XLSX.utils.book_append_sheet(wb, ws, g[1]);
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), g[1]);
       });
-      XLSX.writeFile(wb,"報名匯入範例_勾選式.xlsx");
+      XLSX.writeFile(wb,"報名匯入範本_勾選式.xlsx");
     }
 
     /* ---- 共用：讀 Excel/CSV ---- */
