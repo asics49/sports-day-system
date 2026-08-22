@@ -119,7 +119,7 @@
         <p class="muted">60/100/200 公尺會依下表排道次（比照往年紙本抽籤方式），每組最多 <b id="laneTip">4</b> 道。
           系統已依報名班級自動排好，你也可以<b>直接在格子裡打班級</b>自行填入/調整（比照實際抽籤結果），空格代表該道次從缺。
           班級可以打完整的「6年1班」，也可以打簡寫「601」（年級+2碼班級序號），系統會自動判讀。
-          表頭的道次數字（預設 2/3/4/5）也可以自行改成實際使用的跑道編號。
+          表頭的道次數字（預設 2/3/4/5）與顏色名稱（預設 藍色/綠色/黃色/紅色）都可以自行修改，這份表會整份印在秩序冊第一頁做為「道次分配表」；後面每個項目自己的道次表則只顯示道次數字，不重複列出顏色。
           跳高/跳遠/壘球擲遠與接力類不受此表影響，一律依班級序排列。</p>
         <div class="row">
           <button class="btn ghost" id="shuffleBtn" type="button">隨機排序</button>
@@ -417,6 +417,7 @@
     const RELAY = ["400公尺接力", "大隊接力", "體育班大隊接力"];
     let P_EVENTS = [], P_REGS = [], LANE_GRID = [];
     let LANE_NUMBERS = [2, 3, 4, 5];  // 右昌操場實際可用道次（跑道隆起，只用2~5道），可自行改成實際道次
+    let LANE_COLOR_NAMES = LANE_COLORS.slice(0, USABLE_LANES).map(c => c + "色");  // 各道次顏色（僅用於秩序冊第一頁的道次分配表，個別項目表格不顯示）
 
     function classNum(c) { const m = String(c).match(/(\d+)年(\d+)班/); return m ? Number(m[2]) : 999; }
     function classCompare(a, b) { return classNum(a) - classNum(b); }
@@ -469,7 +470,11 @@
       const box = el("orderList");
       let html = '<table class="prog-table"><thead><tr><th>道次<br>組別</th>' +
         LANE_NUMBERS.map(function (_, i) {
-          return `<th><input type="text" class="lane-num" data-l="${i}" value="${esc(LANE_NUMBERS[i])}" style="width:36px;text-align:center;font-weight:700;color:inherit;border:1px solid var(--line);border-radius:6px;background:#fff">道</th>`;
+          return `<th>
+            <input type="text" class="lane-num" data-l="${i}" value="${esc(LANE_NUMBERS[i])}" style="width:36px;text-align:center;font-weight:700;color:inherit;border:1px solid var(--line);border-radius:6px;background:#fff">道
+            <br>
+            <input type="text" class="lane-color" data-l="${i}" value="${esc(LANE_COLOR_NAMES[i])}" style="width:56px;text-align:center;font-weight:400;color:#888;border:1px solid var(--line);border-radius:6px;background:#fff">
+          </th>`;
         }).join("") +
         '</tr></thead><tbody>';
       LANE_GRID.forEach(function (batch, bi) {
@@ -482,6 +487,9 @@
       box.innerHTML = html;
       box.querySelectorAll(".lane-num").forEach(function (inp) {
         inp.addEventListener("input", function () { LANE_NUMBERS[Number(inp.dataset.l)] = inp.value.trim(); });
+      });
+      box.querySelectorAll(".lane-color").forEach(function (inp) {
+        inp.addEventListener("input", function () { LANE_COLOR_NAMES[Number(inp.dataset.l)] = inp.value.trim(); });
       });
       box.querySelectorAll(".grid-cell").forEach(function (inp) {
         inp.addEventListener("input", function () {
@@ -514,6 +522,20 @@
       if (!confirm("確定清空目前表格，改成自行從頭填入嗎？")) return;
       LANE_GRID = LANE_GRID.map(function () { return new Array(USABLE_LANES).fill(""); });
       renderGrid();
+    }
+
+    function renderLaneAssignmentTable() {
+      const grade = el("grade").value;
+      let body = `<table class="prog-table"><thead><tr><th>道次<br>組別</th>` +
+        LANE_NUMBERS.map(function (n, i) { return `<th>${esc(n)}<br><span class="muted" style="font-weight:400">${esc(LANE_COLOR_NAMES[i])}</span></th>`; }).join("") +
+        `</tr></thead><tbody>`;
+      LANE_GRID.forEach(function (batch, bi) {
+        const count = batch.filter(normalizeClass).length;
+        body += `<tr><td class="lbl">第${cnNum(bi + 1)}組<br><span class="muted" style="font-weight:400">(${count})</span></td>` +
+          batch.map(function (c) { return `<td>${esc(normalizeClass(c))}</td>`; }).join("") + `</tr>`;
+      });
+      body += `</tbody></table>`;
+      return `<div class="prog-event"><h3>${esc(grade)}道次分配表</h3>${body}</div>`;
     }
 
     function regsForEvent(code) { return P_REGS.filter(function (r) { return r["項目代碼"] === code; }); }
@@ -570,6 +592,7 @@
 
     function generateBooklet() {
       let html = `<div class="prog-cover"><h2>${esc(CONFIG.schoolName)} ${esc(CONFIG.eventTitle)}</h2><h3>${esc(el("grade").value)} 秩序冊</h3></div>`;
+      html += renderLaneAssignmentTable();
       let any = false;
       P_EVENTS.forEach(function (ev) {
         const name = ev["名稱"]; let piece = "";
