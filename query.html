@@ -105,11 +105,18 @@
     el("go").addEventListener("click", run);
 
     /* ---- 個人成績總覽 ---- */
+    // 沒選年級時，從班級推出年級（「6年1班」→「6年級」）；後端 student 查詢的年級必須完全相符
+    function gradeFromClass(c) {
+      const m = String(c || "").match(/^(\d+)年/);
+      return m ? m[1] + "年級" : "";
+    }
     async function personalOverview() {
-      const grade = el("p_grade").value, cls = el("p_cls").value.trim(),
+      const cls = el("p_cls").value.trim(),
             seat = el("p_seat").value.trim(), name = el("p_name").value.trim();
+      const grade = el("p_grade").value || gradeFromClass(cls);
       const box = el("p_out");
       if (!cls || !seat) { toast("請至少填班級與座號", "err"); return; }
+      if (!grade) { toast("請選擇年級，或把班級填成「6年1班」這種格式", "err"); return; }
       box.innerHTML = '<p class="muted">查詢中…</p>';
       try {
         const [regData, resData] = await Promise.all([
@@ -117,8 +124,12 @@
           apiGet("query", { cls, name }),
         ]);
         if (!regData.regs.length) { box.innerHTML = '<div class="notice">查無此生的報名紀錄，請確認年級/班級/座號是否正確。</div>'; return; }
+        // 用報名資料裡的姓名精準過濾，避免沒填姓名時把同班同學同項目的成績當成本人的
+        const myName = String(regData.regs[0]["姓名"] || "").trim();
         const byCode = {};
-        resData.results.forEach(function (r) { byCode[r["項目代碼"]] = r; });
+        resData.results
+          .filter(function (r) { return !myName || String(r["姓名"]).trim() === myName; })
+          .forEach(function (r) { byCode[r["項目代碼"]] = r; });
         const rows = regData.regs.map(function (r) {
           const res = byCode[r["項目代碼"]];
           if (!res) return { 項目: r["項目名稱"], 類別: r["類別"], 狀態: '<span class="muted">尚未公布</span>', 名次: "", 紀錄: "", 得分: "" };
@@ -137,7 +148,7 @@
     }
     el("p_go").addEventListener("click", personalOverview);
 
-    function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+    function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   </script>
 </body>
 </html>

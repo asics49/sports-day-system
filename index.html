@@ -53,7 +53,7 @@
         box.innerHTML = '<p class="muted">' + esc(e.message) + '</p>';
       }
     })();
-    function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+    function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
     function fmtDate(d){ if(!d) return ""; try{return new Date(d).toLocaleDateString("zh-TW");}catch(e){return String(d);} }
   </script>
 </body>

@@ -175,7 +175,12 @@
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [];
-    el("a_date").value = new Date().toISOString().slice(0, 10);
+    // 取「本地」日期字串；不能用 toISOString（那是 UTC，台灣early morning 會變成前一天）
+    function todayLocal() {
+      const d = new Date();
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    }
+    el("a_date").value = todayLocal();
 
     function loadAuth(){ try{AUTH=JSON.parse(localStorage.getItem(AUTH_KEY));}catch(e){AUTH=null;} }
     function saveAuth(a){ AUTH=a; localStorage.setItem(AUTH_KEY, JSON.stringify(a)); }
@@ -228,16 +233,19 @@
       if(!files.length) return "";
       return '<div style="margin-top:4px">'+files.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener" style="margin-right:10px">📎 ${esc(f.name)}</a>`).join("")+'</div>';
     }
+    let ANN_LIST = [];
     async function loadAnn(){
       const box=el("a_list");
       try{
         const d=await apiGet("announcements");
-        if(!d.announcements.length){ box.innerHTML='<p class="muted">目前尚無公告。</p>'; return; }
-        box.innerHTML = d.announcements.map(function(a){
+        ANN_LIST = d.announcements;
+        if(!ANN_LIST.length){ box.innerHTML='<p class="muted">目前尚無公告。</p>'; return; }
+        // 用索引查表，不要把標題/內容塞進 onclick 字串——標題含單引號會把屬性截斷
+        box.innerHTML = ANN_LIST.map(function(a, i){
           const pin = String(a["置頂"])==="是" ? '<span class="pin">📌</span>' : "";
           return `<div class="ann" style="display:flex;justify-content:space-between;gap:10px;align-items:start">
             <div><div class="date">${fmtDate(a["日期"])} ${pin}</div><div class="title">${esc(a["標題"])}</div><div class="muted">${esc(a["內容"])}</div>${renderAttachLinks(a["附件"])}</div>
-            <button class="btn red" style="padding:5px 12px;flex:0 0 auto" onclick='delAnn(${JSON.stringify(String(a["標題"]))},${JSON.stringify(String(a["內容"]||""))})'>刪除</button>
+            <button class="btn red" style="padding:5px 12px;flex:0 0 auto" onclick="delAnn(${i})">刪除</button>
           </div>`;
         }).join("");
       }catch(e){ box.innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
@@ -274,10 +282,11 @@
       }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
       finally{ setBusy(b,false); }
     }
-    window.delAnn = async function(title, body){
-      if(!confirm("確定刪除這則公告？")) return;
-      try{ await apiPost("deleteAnnouncement",{token:AUTH.token, 標題:title, 內容:body}); toast("已刪除","ok"); loadAnn(); }
-      catch(e){ toast(e.message,"err"); }
+    window.delAnn = async function(i){
+      const a = ANN_LIST[i]; if(!a) return;
+      if(!confirm(`確定刪除公告「${a["標題"]}」？`)) return;
+      try{ await apiPost("deleteAnnouncement",{token:AUTH.token, 標題:String(a["標題"]), 內容:String(a["內容"]||"")}); toast("已刪除","ok"); loadAnn(); }
+      catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
     };
 
     /* ---- 賽事行事曆管理 ---- */
@@ -416,11 +425,20 @@
     const FIELD = ["跳高", "跳遠", "壘球擲遠"];
     const RELAY = ["400公尺接力", "大隊接力", "體育班大隊接力"];
     let P_EVENTS = [], P_REGS = [], LANE_GRID = [];
-    let LANE_NUMBERS = [2, 3, 4, 5];  // 右昌操場實際可用道次（跑道隆起，只用2~5道），可自行改成實際道次
-    let LANE_COLOR_NAMES = LANE_COLORS.slice(0, USABLE_LANES).map(c => c + "色");  // 各道次顏色（僅用於秩序冊第一頁的道次分配表，個別項目表格不顯示）
+    // 右昌操場跑道隆起，實際只用 2~5 道；長度一律跟著 USABLE_LANES，改 USABLE_LANES 就會自動補足欄位
+    const DEFAULT_LANE_NUMBERS = [2, 3, 4, 5];
+    let LANE_NUMBERS = Array.from({ length: USABLE_LANES }, function (_, i) {
+      if (DEFAULT_LANE_NUMBERS[i] != null) return DEFAULT_LANE_NUMBERS[i];
+      // 超出預設的部分接續往下編號，不要跟前面重複
+      return DEFAULT_LANE_NUMBERS[DEFAULT_LANE_NUMBERS.length - 1] + (i - DEFAULT_LANE_NUMBERS.length + 1);
+    });
+    // 各道次顏色（僅用於秩序冊第一頁的道次分配表，個別項目表格不顯示）
+    let LANE_COLOR_NAMES = Array.from({ length: USABLE_LANES }, (_, i) => (LANE_COLORS[i] || String(i + 1)) + "色");
 
     function classNum(c) { const m = String(c).match(/(\d+)年(\d+)班/); return m ? Number(m[2]) : 999; }
-    function classCompare(a, b) { return classNum(a) - classNum(b); }
+    function gradeNum(c) { const m = String(c).match(/(\d+)年(\d+)班/); return m ? Number(m[1]) : 999; }
+    // 先比年級再比班級，否則「全部年級」查詢時 4年1班/5年1班/6年1班 會交錯排在一起
+    function classCompare(a, b) { return gradeNum(a) - gradeNum(b) || classNum(a) - classNum(b); }
 
     function buildGridFromClasses(classes) {
       const grid = [];
@@ -469,7 +487,7 @@
       el("laneTip").textContent = USABLE_LANES;
       const box = el("orderList");
       let html = '<table class="prog-table"><thead><tr><th>道次<br>組別</th>' +
-        LANE_NUMBERS.map(function (_, i) {
+        Array.from({ length: USABLE_LANES }, function (_, i) {
           return `<th>
             <input type="text" class="lane-num" data-l="${i}" value="${esc(LANE_NUMBERS[i])}" style="width:36px;text-align:center;font-weight:700;color:inherit;border:1px solid var(--line);border-radius:6px;background:#fff">道
             <br>

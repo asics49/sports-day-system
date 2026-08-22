@@ -54,11 +54,11 @@
         out.innerHTML = dates.map(function (d) {
           const items = byDate[d].map(function (r) {
             const meta = [r["年級"], r["時間"], r["地點"]].filter(Boolean).join(" · ");
-            const chk = r["檢錄時間"] ? `檢錄：${esc(r["檢錄時間"])}` : "";
+            const chk = r["檢錄時間"] ? `檢錄：${esc(r["檢錄時間"])}` : "";   // 已 esc 過，下面不可再 esc 一次
             const note = r["備註"] ? `<div class="meta">${esc(r["備註"])}</div>` : "";
             return `<div class="sched-item">
               <div class="name">${esc(r["項目"])}</div>
-              <div class="meta">${esc(meta)}${chk ? "　" + esc(chk) : ""}</div>
+              <div class="meta">${esc(meta)}${chk ? "　" + chk : ""}</div>
               ${note}
             </div>`;
           }).join("");
@@ -70,7 +70,7 @@
       } catch (e) { out.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
     document.addEventListener("DOMContentLoaded", run);
-    function esc(s) { return String(s == null ? "" : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   </script>
 </body>
 </html>
