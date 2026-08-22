@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>賽事行事曆 · 右昌國小運動會</title>
+  <link rel="icon" href="assets/banner-small.jpg">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .sched-day { display: flex; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .sched-day:last-child { border-bottom: none; }
+    .sched-date { flex: 0 0 96px; text-align: center; }
+    .sched-date .d { font-size: 22px; font-weight: 800; color: var(--gold-d); line-height: 1.1; }
+    .sched-date .w { font-size: 13px; color: #888; }
+    .sched-items { flex: 1; min-width: 0; }
+    .sched-item { padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+    .sched-item:last-child { margin-bottom: 0; }
+    .sched-item .name { font-weight: 700; }
+    .sched-item .meta { color: #777; font-size: 13px; margin-top: 2px; }
+  </style>
+</head>
+<body data-page="schedule">
+  <main>
+    <section class="card">
+      <h2>賽事行事曆</h2>
+      <p class="muted">校慶運動會各項目的比賽日期、時間、地點與檢錄時間，依日期排列。</p>
+      <div id="out"><p class="muted">載入中…</p></div>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    const WD = ["日", "一", "二", "三", "四", "五", "六"];
+    function weekday(dateStr) {
+      const d = new Date(dateStr);
+      return isNaN(d) ? "" : WD[d.getDay()];
+    }
+    function fmtMD(dateStr) {
+      const d = new Date(dateStr);
+      if (isNaN(d)) return esc(dateStr);
+      return (d.getMonth() + 1) + "/" + d.getDate();
+    }
+    async function run() {
+      const out = el("out"); out.innerHTML = '<p class="muted">載入中…</p>';
+      try {
+        const data = await apiGet("schedule");
+        if (!data.schedule.length) { out.innerHTML = '<div class="notice">尚未公布賽事行事曆。</div>'; return; }
+        const byDate = {};
+        data.schedule.forEach(function (r) { const d = r["日期"]; (byDate[d] || (byDate[d] = [])).push(r); });
+        const dates = Object.keys(byDate).sort();
+        out.innerHTML = dates.map(function (d) {
+          const items = byDate[d].map(function (r) {
+            const meta = [r["年級"], r["時間"], r["地點"]].filter(Boolean).join(" · ");
+            const chk = r["檢錄時間"] ? `檢錄：${esc(r["檢錄時間"])}` : "";
+            const note = r["備註"] ? `<div class="meta">${esc(r["備註"])}</div>` : "";
+            return `<div class="sched-item">
+              <div class="name">${esc(r["項目"])}</div>
+              <div class="meta">${esc(meta)}${chk ? "　" + esc(chk) : ""}</div>
+              ${note}
+            </div>`;
+          }).join("");
+          return `<div class="sched-day">
+            <div class="sched-date"><div class="d">${fmtMD(d)}</div><div class="w">星期${weekday(d)}</div></div>
+            <div class="sched-items">${items}</div>
+          </div>`;
+        }).join("");
+      } catch (e) { out.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+    document.addEventListener("DOMContentLoaded", run);
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+  </script>
+</body>
+</html>

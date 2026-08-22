@@ -54,6 +54,31 @@
       <div id="a_list"><p class="muted">載入中…</p></div>
     </section>
 
+    <!-- 賽事行事曆管理 -->
+    <section class="card panel" style="display:none">
+      <h2>賽事行事曆管理</h2>
+      <div class="grid2">
+        <div><label>日期 *</label><input id="s_date" type="date"></div>
+        <div><label>年級</label><input id="s_grade" placeholder="5年級 / 4-5年級 / 全校"></div>
+      </div>
+      <label>項目 *</label><input id="s_item" placeholder="例：壘球擲遠">
+      <div class="grid2">
+        <div><label>時間</label><input id="s_time" placeholder="8:00-9:00"></div>
+        <div><label>地點</label><input id="s_place" placeholder="操場"></div>
+      </div>
+      <div class="grid2">
+        <div><label>檢錄時間</label><input id="s_checkin" placeholder="7:50 司令台前"></div>
+        <div><label>備註</label><input id="s_note" placeholder="選填"></div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn" id="s_save" type="button">新增賽程</button>
+        <button class="btn ghost" id="s_cancelEdit" type="button" style="display:none">取消編輯</button>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+      <h3 style="color:var(--gold-d)">目前賽程</h3>
+      <div id="s_list"><p class="muted">載入中…</p></div>
+    </section>
+
     <section class="card panel" style="display:none">
       <p class="muted">📥 <b>報名匯入</b>已移到「<a href="register.html">線上報名</a>」頁（老師登入後即可批次上傳）。此管理頁專責公告。</p>
     </section>
@@ -96,7 +121,7 @@
       el("whoCard").style.display="block";
       document.querySelectorAll(".panel").forEach(p=>p.style.display="block");
       el("who").textContent = AUTH.name + "（" + (AUTH.role==="admin"?"管理者":"老師") + "）";
-      loadEvents(); loadAnn();
+      loadEvents(); loadAnn(); loadSchedule();
     }
 
     async function loadEvents(){ try{ const d=await apiGet("events"); EVENTS=d.events; }catch(e){} }
@@ -161,6 +186,61 @@
       if(!confirm("確定刪除這則公告？")) return;
       try{ await apiPost("deleteAnnouncement",{token:AUTH.token, 標題:title, 內容:body}); toast("已刪除","ok"); loadAnn(); }
       catch(e){ toast(e.message,"err"); }
+    };
+
+    /* ---- 賽事行事曆管理 ---- */
+    let SCHEDULE = [], EDIT_ID = "";
+    async function loadSchedule() {
+      const box = el("s_list");
+      try {
+        const d = await apiGet("schedule");
+        SCHEDULE = d.schedule;
+        if (!SCHEDULE.length) { box.innerHTML = '<p class="muted">目前尚無賽程。</p>'; return; }
+        const rows = SCHEDULE.slice().sort((a, b) => String(a["日期"]).localeCompare(String(b["日期"])) || String(a["時間"]).localeCompare(String(b["時間"])));
+        box.innerHTML = rows.map(function (r) {
+          return `<div class="ann" style="display:flex;justify-content:space-between;gap:10px;align-items:start">
+            <div><div class="date">${esc(r["日期"])} ${esc(r["時間"] || "")}</div>
+              <div class="title">${esc(r["項目"])}${r["年級"] ? '　<span class="muted">' + esc(r["年級"]) + '</span>' : ''}</div>
+              <div class="muted">${esc(r["地點"] || "")}${r["檢錄時間"] ? '　檢錄：' + esc(r["檢錄時間"]) : ''}${r["備註"] ? '　' + esc(r["備註"]) : ''}</div>
+            </div>
+            <div class="row" style="flex:0 0 auto">
+              <button class="btn ghost" style="padding:5px 12px" onclick='editSched(${JSON.stringify(String(r["編號"]))})'>編輯</button>
+              <button class="btn red" style="padding:5px 12px" onclick='delSched(${JSON.stringify(String(r["編號"]))})'>刪除</button>
+            </div>
+          </div>`;
+        }).join("");
+      } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+    window.editSched = function (id) {
+      const r = SCHEDULE.find(x => String(x["編號"]) === String(id)); if (!r) return;
+      EDIT_ID = id;
+      el("s_date").value = r["日期"]; el("s_grade").value = r["年級"] || ""; el("s_item").value = r["項目"];
+      el("s_time").value = r["時間"] || ""; el("s_place").value = r["地點"] || ""; el("s_checkin").value = r["檢錄時間"] || ""; el("s_note").value = r["備註"] || "";
+      el("s_save").textContent = "更新此筆賽程"; el("s_cancelEdit").style.display = "inline-block";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    function cancelEdit() {
+      EDIT_ID = ""; el("s_save").textContent = "新增賽程"; el("s_cancelEdit").style.display = "none";
+      ["s_date", "s_grade", "s_item", "s_time", "s_place", "s_checkin", "s_note"].forEach(id => el(id).value = "");
+    }
+    async function saveSchedule() {
+      const payload = {
+        日期: el("s_date").value, 項目: el("s_item").value.trim(), 年級: el("s_grade").value.trim(),
+        時間: el("s_time").value.trim(), 地點: el("s_place").value.trim(), 檢錄時間: el("s_checkin").value.trim(), 備註: el("s_note").value.trim()
+      };
+      if (!payload.日期 || !payload.項目) return toast("請至少填日期與項目", "err");
+      const b = el("s_save"); setBusy(b, true, EDIT_ID ? "更新中…" : "新增中…");
+      try {
+        if (EDIT_ID) { await apiPost("updateSchedule", Object.assign({ token: AUTH.token, 編號: EDIT_ID }, payload)); toast("已更新賽程", "ok"); }
+        else { await apiPost("addSchedule", Object.assign({ token: AUTH.token }, payload)); toast("已新增賽程", "ok"); }
+        cancelEdit(); loadSchedule();
+      } catch (e) { toast(e.message, "err"); if (/登入/.test(e.message)) { clearAuth(); location.reload(); } }
+      finally { setBusy(b, false); }
+    }
+    window.delSched = async function (id) {
+      if (!confirm("確定刪除這筆賽程？")) return;
+      try { await apiPost("deleteSchedule", { token: AUTH.token, 編號: id }); toast("已刪除", "ok"); loadSchedule(); }
+      catch (e) { toast(e.message, "err"); }
     };
 
     /* ---- 匯入報名（格子勾選式，4/5/6年級各一工作表） ---- */
@@ -307,6 +387,8 @@
     el("pw").addEventListener("keydown", e=>{ if(e.key==="Enter") login(); });
     el("logoutBtn").addEventListener("click", ()=>{ clearAuth(); location.reload(); });
     el("a_pub").addEventListener("click", publishAnn);
+    el("s_save").addEventListener("click", saveSchedule);
+    el("s_cancelEdit").addEventListener("click", cancelEdit);
 
     loadAuth();
     document.addEventListener("DOMContentLoaded", function(){ if(AUTH&&AUTH.token) showPanels(); else initGoogle(); });
