@@ -10,15 +10,15 @@
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
   <style>
-    .prog-table { margin: 10px 0 18px; }
-    .prog-table th, .prog-table td { border: 1px solid var(--line); padding: 6px 10px; text-align: center; }
-    .prog-table td.lbl { font-weight: 700; background: #faf6ee; white-space: nowrap; }
-    .prog-event { margin-bottom: 22px; padding-bottom: 10px; border-bottom: 2px dashed var(--line); }
-    .prog-event h3 { color: var(--gold-d); margin-bottom: 6px; }
+    .prog-table { margin: 4px 0 10px; border-collapse: collapse; }
+    .prog-table th, .prog-table td { border: none; border-bottom: 1px solid var(--line); padding: 3px 10px; text-align: center; }
+    .prog-table td.lbl { font-weight: 700; white-space: nowrap; }
+    .prog-event { margin-bottom: 10px; }
+    .prog-event h3 { color: var(--gold-d); margin-bottom: 4px; }
     .prog-cover { text-align: center; margin-bottom: 24px; }
     @media print {
       .site-header, .site-nav, .site-footer, .no-print, #loginCard { display: none !important; }
-      .prog-event { page-break-after: always; border-bottom: none; }
+      .prog-table, .prog-event { break-inside: avoid; }
       body { background: #fff; }
     }
   </style>
@@ -149,13 +149,21 @@
     <div class="func-panel" id="regWrap" style="display:none">
       <section class="card">
         <h2>報名管理</h2>
-        <p class="muted">依年級（可加班級篩選）列出報名資料，逐筆刪除。常用來清掉測試資料或報錯的報名。</p>
+        <p class="muted">依年級（可加班級篩選）列出報名資料，可逐筆刪除，也可以勾選整班或全選後一次刪除。常用來清掉測試資料或報錯的報名。</p>
         <div class="grid2">
           <div><label>年級</label><select id="r_grade"><option value="">全部</option><option>4年級</option><option>5年級</option><option>6年級</option></select></div>
           <div><label>班級（選填）</label><input id="r_cls" placeholder="6年1班"></div>
         </div>
         <div style="margin-top:12px"><button class="btn" id="r_search" type="button">查詢</button></div>
         <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+        <div id="r_toolbar" style="display:none;margin-bottom:10px">
+          <div class="row" style="align-items:center;gap:14px">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" id="r_selectAll">全選</label>
+            <div id="r_classQuick" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+            <button class="btn red" id="r_delSelected" type="button">刪除已選</button>
+            <span class="muted">已選 <b id="r_selCount">0</b> 筆</span>
+          </div>
+        </div>
         <div id="r_list"><p class="muted">請設定條件後按「查詢」。</p></div>
       </section>
     </div>
@@ -338,18 +346,42 @@
     async function searchReg() {
       const box = el("r_list");
       box.innerHTML = '<p class="muted">查詢中…</p>';
+      el("r_toolbar").style.display = "none";
       try {
         const d = await apiGet("reglist", { grade: el("r_grade").value, cls: el("r_cls").value.trim() });
         REG_LIST = d.regs.slice().sort((a, b) => classCompare(a["班級"], b["班級"]) || Number(a["座號"]) - Number(b["座號"]));
         if (!REG_LIST.length) { box.innerHTML = '<p class="muted">查無報名資料。</p>'; return; }
         box.innerHTML = `<div class="notice">共 ${REG_LIST.length} 筆。</div>
-          <div class="table-wrap"><table><thead><tr><th>年級</th><th>班級</th><th>座號</th><th>姓名</th><th>項目</th><th>類別</th><th></th></tr></thead>
+          <div class="table-wrap"><table><thead><tr><th></th><th>年級</th><th>班級</th><th>座號</th><th>姓名</th><th>項目</th><th>類別</th><th></th></tr></thead>
           <tbody>${REG_LIST.map((r, i) => `<tr>
+            <td><input type="checkbox" class="r_chk" data-i="${i}" data-cls="${esc(r["班級"])}"></td>
             <td>${esc(r["年級"])}</td><td>${esc(r["班級"])}</td><td>${esc(r["座號"])}</td><td>${esc(r["姓名"])}</td>
             <td>${esc(r["項目名稱"])}</td><td class="muted">${esc(r["類別"])}</td>
             <td><button class="btn red" style="padding:4px 10px" onclick="delReg(${i})">刪除</button></td>
           </tr>`).join("")}</tbody></table></div>`;
+        const classes = Array.from(new Set(REG_LIST.map(r => r["班級"]))).sort(classCompare);
+        el("r_classQuick").innerHTML = classes.map(c => `<label style="display:flex;align-items:center;gap:4px"><input type="checkbox" class="r_chkClass" data-cls="${esc(c)}">${esc(c)}</label>`).join("");
+        el("r_toolbar").style.display = "block";
+        updateSelCount();
+        box.querySelectorAll(".r_chk").forEach(chk => chk.addEventListener("change", updateSelCount));
+        el("r_selectAll").checked = false;
+        el("r_selectAll").onchange = function () {
+          box.querySelectorAll(".r_chk").forEach(chk => chk.checked = this.checked);
+          el("r_classQuick").querySelectorAll(".r_chkClass").forEach(chk => chk.checked = false);
+          updateSelCount();
+        };
+        el("r_classQuick").querySelectorAll(".r_chkClass").forEach(function (cchk) {
+          cchk.addEventListener("change", function () {
+            const cls = this.dataset.cls;
+            box.querySelectorAll(`.r_chk[data-cls="${CSS.escape(cls)}"]`).forEach(chk => chk.checked = this.checked);
+            updateSelCount();
+          });
+        });
       } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+    function updateSelCount() {
+      const n = document.querySelectorAll(".r_chk:checked").length;
+      el("r_selCount").textContent = n;
     }
     window.delReg = async function (i) {
       const r = REG_LIST[i]; if (!r) return;
@@ -359,6 +391,23 @@
         toast("已刪除", "ok"); searchReg();
       } catch (e) { toast(e.message, "err"); if (/登入/.test(e.message)) { clearAuth(); location.reload(); } }
     };
+    async function delRegSelected() {
+      const idxs = Array.from(document.querySelectorAll(".r_chk:checked")).map(chk => Number(chk.dataset.i));
+      if (!idxs.length) return toast("請先勾選要刪除的項目", "err");
+      if (!confirm(`確定刪除已選取的 ${idxs.length} 筆報名資料？`)) return;
+      const btn = el("r_delSelected"); setBusy(btn, true, "刪除中…");
+      let ok = 0, fail = 0;
+      for (const i of idxs) {
+        const r = REG_LIST[i]; if (!r) continue;
+        try {
+          await apiPost("deletereg", { token: AUTH.token, 年級: r["年級"], 班級: r["班級"], 座號: r["座號"], 項目代碼: r["項目代碼"] });
+          ok++;
+        } catch (e) { fail++; }
+      }
+      setBusy(btn, false);
+      toast(`已刪除 ${ok} 筆${fail ? "，失敗 " + fail + " 筆" : ""}`, fail ? "err" : "ok");
+      searchReg();
+    }
 
     /* ---- 秩序冊產生 ---- */
     const USABLE_LANES = 4;
@@ -368,7 +417,6 @@
     const RELAY = ["400公尺接力", "大隊接力", "體育班大隊接力"];
     let P_EVENTS = [], P_REGS = [], LANE_GRID = [];
     let LANE_NUMBERS = [2, 3, 4, 5];  // 右昌操場實際可用道次（跑道隆起，只用2~5道），可自行改成實際道次
-    let LANE_LABELS = LANE_COLORS.slice(0, USABLE_LANES);  // 各道次的接力棒顏色，可自行修改文字
 
     function classNum(c) { const m = String(c).match(/(\d+)年(\d+)班/); return m ? Number(m[2]) : 999; }
     function classCompare(a, b) { return classNum(a) - classNum(b); }
@@ -421,11 +469,7 @@
       const box = el("orderList");
       let html = '<table class="prog-table"><thead><tr><th>道次<br>組別</th>' +
         LANE_NUMBERS.map(function (_, i) {
-          return `<th>
-            <input type="text" class="lane-num" data-l="${i}" value="${esc(LANE_NUMBERS[i])}" style="width:36px;text-align:center;font-weight:700;color:inherit;border:1px solid var(--line);border-radius:6px;background:#fff">道
-            <br>
-            <input type="text" class="lane-label" data-l="${i}" value="${esc(LANE_LABELS[i])}" style="width:48px;text-align:center;font-weight:400;color:#888;border:1px solid var(--line);border-radius:6px;background:#fff">棒
-          </th>`;
+          return `<th><input type="text" class="lane-num" data-l="${i}" value="${esc(LANE_NUMBERS[i])}" style="width:36px;text-align:center;font-weight:700;color:inherit;border:1px solid var(--line);border-radius:6px;background:#fff">道</th>`;
         }).join("") +
         '</tr></thead><tbody>';
       LANE_GRID.forEach(function (batch, bi) {
@@ -438,9 +482,6 @@
       box.innerHTML = html;
       box.querySelectorAll(".lane-num").forEach(function (inp) {
         inp.addEventListener("input", function () { LANE_NUMBERS[Number(inp.dataset.l)] = inp.value.trim(); });
-      });
-      box.querySelectorAll(".lane-label").forEach(function (inp) {
-        inp.addEventListener("input", function () { LANE_LABELS[Number(inp.dataset.l)] = inp.value.trim(); });
       });
       box.querySelectorAll(".grid-cell").forEach(function (inp) {
         inp.addEventListener("input", function () {
@@ -492,7 +533,7 @@
         const maxN = Math.max(0, ...batch.map(function (c) { return c ? (byClass[c] || []).length : 0; }));
         if (!maxN) return;
         body += `<table class="prog-table"><thead><tr><th>道次</th>${batch.map(function (c, i) {
-          return `<th>${esc(LANE_NUMBERS[i])}道<br><span class="muted" style="font-weight:400">${esc(LANE_LABELS[i])}棒</span></th>`;
+          return `<th>${esc(LANE_NUMBERS[i])}道</th>`;
         }).join("")}</tr></thead><tbody><tr><td class="lbl">班級</td>${batch.map(function (c) { return `<td>${esc(c)}</td>`; }).join("")}</tr>`;
         for (let i = 0; i < maxN; i++) {
           heatNum++;
@@ -550,6 +591,7 @@
     el("s_save").addEventListener("click", saveSchedule);
     el("s_cancelEdit").addEventListener("click", cancelEdit);
     el("r_search").addEventListener("click", searchReg);
+    el("r_delSelected").addEventListener("click", delRegSelected);
     el("grade").addEventListener("change", onGradeChange);
     el("shuffleBtn").addEventListener("click", shuffleOrder);
     el("resetOrderBtn").addEventListener("click", resetGrid);
