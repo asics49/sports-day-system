@@ -11,7 +11,6 @@ const NAV = [
   { href: "query.html",    label: "成績查詢",   key: "query" },
   { href: "ranking.html",  label: "班級積分",   key: "ranking" },
   { href: "score.html",    label: "成績輸入",   key: "score" },
-  { href: "program.html",  label: "秩序冊產生", key: "program" },
   { href: "admin.html",    label: "管理",       key: "admin" },
 ];
 

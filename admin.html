@@ -9,6 +9,21 @@
   <link rel="stylesheet" href="css/style.css">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
+  <style>
+    .prog-table { margin: 10px 0 18px; }
+    .prog-table th, .prog-table td { border: 1px solid var(--line); padding: 6px 10px; text-align: center; }
+    .prog-table td.lbl { font-weight: 700; background: #faf6ee; white-space: nowrap; }
+    .prog-event { margin-bottom: 22px; padding-bottom: 10px; border-bottom: 2px dashed var(--line); }
+    .prog-event h3 { color: var(--gold-d); margin-bottom: 6px; }
+    .prog-cover { text-align: center; margin-bottom: 24px; }
+    .order-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; }
+    .order-item button { padding: 2px 10px; }
+    @media print {
+      .site-header, .site-nav, .site-footer, .no-print, #loginCard { display: none !important; }
+      .prog-event { page-break-after: always; border-bottom: none; }
+      body { background: #fff; }
+    }
+  </style>
 </head>
 <body data-page="admin">
   <main>
@@ -29,59 +44,101 @@
       <div id="loginMsg"></div>
     </section>
 
-    <section class="card" id="whoCard" style="display:none">
+    <section class="card no-print" id="whoCard" style="display:none">
       <div class="row" style="justify-content:space-between">
         <div class="muted">已登入：<b id="who"></b></div>
         <button class="btn ghost" id="logoutBtn" type="button">登出</button>
       </div>
+      <hr style="border:none;border-top:1px solid var(--line);margin:14px 0 10px">
+      <label>選擇功能</label>
+      <select id="funcSelect">
+        <option value="ann">發布公告</option>
+        <option value="schedule">賽事行事曆管理</option>
+        <option value="program">秩序冊產生</option>
+      </select>
+      <p class="muted" style="font-size:13px;margin-top:8px">📥 報名匯入請到「<a href="register.html">線上報名</a>」頁（老師登入後即可批次上傳）。</p>
     </section>
 
     <!-- 發布公告 -->
-    <section class="card panel" style="display:none">
-      <h2>發布公告</h2>
-      <div class="grid2">
-        <div><label>日期</label><input id="a_date" type="date"></div>
-        <div><label>置頂</label><select id="a_pin"><option value="">否</option><option value="是">是（置頂）</option></select></div>
-      </div>
-      <label>標題 *</label><input id="a_title" placeholder="例：報名開始">
-      <label>內容</label><textarea id="a_body" rows="3" placeholder="公告內容…"></textarea>
-      <label>附件（選填，可多選；圖片/PDF/Word/Excel 等）</label>
-      <input type="file" id="a_files" multiple>
-      <div id="a_fileTip" class="muted" style="font-size:13px;margin-top:4px"></div>
-      <div style="margin-top:12px"><button class="btn" id="a_pub" type="button">發布公告</button></div>
-      <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
-      <h3 style="color:var(--gold-d)">目前公告</h3>
-      <div id="a_list"><p class="muted">載入中…</p></div>
-    </section>
+    <div class="func-panel" id="annWrap" style="display:none">
+      <section class="card">
+        <h2>發布公告</h2>
+        <div class="grid2">
+          <div><label>日期</label><input id="a_date" type="date"></div>
+          <div><label>置頂</label><select id="a_pin"><option value="">否</option><option value="是">是（置頂）</option></select></div>
+        </div>
+        <label>標題 *</label><input id="a_title" placeholder="例：報名開始">
+        <label>內容</label><textarea id="a_body" rows="3" placeholder="公告內容…"></textarea>
+        <label>附件（選填，可多選；圖片/PDF/Word/Excel 等）</label>
+        <input type="file" id="a_files" multiple>
+        <div id="a_fileTip" class="muted" style="font-size:13px;margin-top:4px"></div>
+        <div style="margin-top:12px"><button class="btn" id="a_pub" type="button">發布公告</button></div>
+        <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+        <h3 style="color:var(--gold-d)">目前公告</h3>
+        <div id="a_list"><p class="muted">載入中…</p></div>
+      </section>
+    </div>
 
     <!-- 賽事行事曆管理 -->
-    <section class="card panel" style="display:none">
-      <h2>賽事行事曆管理</h2>
-      <div class="grid2">
-        <div><label>日期 *</label><input id="s_date" type="date"></div>
-        <div><label>年級</label><input id="s_grade" placeholder="5年級 / 4-5年級 / 全校"></div>
-      </div>
-      <label>項目 *</label><input id="s_item" placeholder="例：壘球擲遠">
-      <div class="grid2">
-        <div><label>時間</label><input id="s_time" placeholder="8:00-9:00"></div>
-        <div><label>地點</label><input id="s_place" placeholder="操場"></div>
-      </div>
-      <div class="grid2">
-        <div><label>檢錄時間</label><input id="s_checkin" placeholder="7:50 司令台前"></div>
-        <div><label>備註</label><input id="s_note" placeholder="選填"></div>
-      </div>
-      <div style="margin-top:12px">
-        <button class="btn" id="s_save" type="button">新增賽程</button>
-        <button class="btn ghost" id="s_cancelEdit" type="button" style="display:none">取消編輯</button>
-      </div>
-      <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
-      <h3 style="color:var(--gold-d)">目前賽程</h3>
-      <div id="s_list"><p class="muted">載入中…</p></div>
-    </section>
+    <div class="func-panel" id="scheduleWrap" style="display:none">
+      <section class="card">
+        <h2>賽事行事曆管理</h2>
+        <div class="grid2">
+          <div><label>日期 *</label><input id="s_date" type="date"></div>
+          <div><label>年級</label><input id="s_grade" placeholder="5年級 / 4-5年級 / 全校"></div>
+        </div>
+        <label>項目 *</label><input id="s_item" placeholder="例：壘球擲遠">
+        <div class="grid2">
+          <div><label>時間</label><input id="s_time" placeholder="8:00-9:00"></div>
+          <div><label>地點</label><input id="s_place" placeholder="操場"></div>
+        </div>
+        <div class="grid2">
+          <div><label>檢錄時間</label><input id="s_checkin" placeholder="7:50 司令台前"></div>
+          <div><label>備註</label><input id="s_note" placeholder="選填"></div>
+        </div>
+        <div style="margin-top:12px">
+          <button class="btn" id="s_save" type="button">新增賽程</button>
+          <button class="btn ghost" id="s_cancelEdit" type="button" style="display:none">取消編輯</button>
+        </div>
+        <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+        <h3 style="color:var(--gold-d)">目前賽程</h3>
+        <div id="s_list"><p class="muted">載入中…</p></div>
+      </section>
+    </div>
 
-    <section class="card panel" style="display:none">
-      <p class="muted">📥 <b>報名匯入</b>已移到「<a href="register.html">線上報名</a>」頁（老師登入後即可批次上傳）。此管理頁專責公告。</p>
-    </section>
+    <!-- 秩序冊產生 -->
+    <div class="func-panel" id="programWrap" style="display:none">
+      <section class="card no-print">
+        <h2>秩序冊產生</h2>
+        <label>年級</label>
+        <select id="grade"><option value="">請選擇</option><option>4年級</option><option>5年級</option><option>6年級</option></select>
+        <div id="loadArea" style="margin-top:10px"></div>
+      </section>
+
+      <section class="card no-print" id="drawCard" style="display:none">
+        <h2>短跑分道抽籤順序</h2>
+        <p class="muted">60/100/200 公尺會依此順序，每 <b id="laneTip">4</b> 班一組排道次（比照往年紙本抽籤方式）。
+          請用 ▲▼ 調整成實際抽籤結果，或按「隨機排序」由系統代抽。跳高/跳遠/壘球擲遠與接力類不受此順序影響，一律依班級序排列。</p>
+        <div class="row">
+          <button class="btn ghost" id="shuffleBtn" type="button">隨機排序</button>
+          <button class="btn ghost" id="resetOrderBtn" type="button">依班級序重設</button>
+        </div>
+        <div id="orderList" style="margin-top:12px"></div>
+      </section>
+
+      <section class="card no-print" id="genCard" style="display:none">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0">產生秩序冊</h2>
+          <div class="row">
+            <button class="btn ghost" id="genBtn" type="button">產生 / 重新產生</button>
+            <button class="btn" id="printBtn" type="button" style="display:none">🖨 列印 / 存成 PDF</button>
+          </div>
+        </div>
+        <p class="muted">請先確認上方抽籤順序再產生；順序若有更改，需重新按一次「產生」。</p>
+      </section>
+
+      <section id="bookletArea"></section>
+    </div>
   </main>
 
   <script src="js/config.js"></script>
@@ -119,10 +176,17 @@
     function showPanels(){
       el("loginCard").style.display="none";
       el("whoCard").style.display="block";
-      document.querySelectorAll(".panel").forEach(p=>p.style.display="block");
       el("who").textContent = AUTH.name + "（" + (AUTH.role==="admin"?"管理者":"老師") + "）";
+      showFunc(el("funcSelect").value);
       loadEvents(); loadAnn(); loadSchedule();
     }
+
+    /* ---- 功能切換 ---- */
+    function showFunc(name){
+      document.querySelectorAll(".func-panel").forEach(function(p){ p.style.display = "none"; });
+      el(name+"Wrap").style.display = "block";
+    }
+    el("funcSelect").addEventListener("change", function(){ showFunc(this.value); });
 
     async function loadEvents(){ try{ const d=await apiGet("events"); EVENTS=d.events; }catch(e){} }
 
@@ -249,144 +313,135 @@
       catch (e) { toast(e.message, "err"); }
     };
 
-    /* ---- 匯入報名（格子勾選式，4/5/6年級各一工作表） ---- */
-    let EVENT_OVER = [];
-    function sheetGrade(name){ const m=String(name).match(/[456]/); return m ? m[0]+"年級" : ""; }
-    function headerToEvent(header, grade){
-      header=String(header).trim(); let sex="", name=header;
-      if(header.indexOf("男生")===0){ sex="男"; name=header.slice(2); }
-      else if(header.indexOf("女生")===0){ sex="女"; name=header.slice(2); }
-      else return null;                       // 只認「男生/女生+項目」的欄位
-      name=name.trim();
-      const m=EVENTS.filter(e=>String(e["組別"])===grade && String(e["名稱"])===name && String(e["性別"])===sex);
-      return m.length ? m[0] : null;
-    }
-    function readAllSheets(file){
-      return new Promise(function(resolve,reject){
-        const fr=new FileReader();
-        fr.onload=function(e){ try{
-          const wb=XLSX.read(e.target.result,{type:"array"});
-          resolve(wb.SheetNames.map(n=>({name:n, rows:XLSX.utils.sheet_to_json(wb.Sheets[n],{defval:""})})));
-        }catch(err){reject(err);} };
-        fr.onerror=reject; fr.readAsArrayBuffer(file);
-      });
-    }
-    async function onRegFile(ev){
-      const f=ev.target.files[0]; if(!f) return;
-      if(!EVENTS.length){ return toast("項目資料載入中，請稍候再試","err"); }
-      let sheets; try{ sheets=await readAllSheets(f); }catch(e){ return toast("讀檔失敗："+e.message,"err"); }
-      const smap={}, order=[], evCount={};   // evCount: 年級|班別|代碼 -> 人數
-      sheets.forEach(function(sh){
-        const grade=sheetGrade(sh.name); if(!grade || !sh.rows.length) return;
-        const cols=Object.keys(sh.rows[0]).map(h=>({h, ev:headerToEvent(h,grade)})).filter(c=>c.ev);
-        sh.rows.forEach(function(r){
-          const 班別=String(r["班別"]||r["班級"]||"").trim();
-          const 座號=String(r["座號"]||"").trim();
-          const 姓名=String(r["姓名"]||"").trim();
-          if(!班別 || !姓名) return;
-          if(/範例|說明|請刪除/.test(班別) || /範例|請刪除/.test(姓名)) return;  // 略過範例/說明列
-          const joined=cols.filter(c=>String(r[c.h]||"").trim()!=="");
-          if(!joined.length) return;
-          const key=grade+"|"+班別+"|"+座號+"|"+姓名;
-          if(!smap[key]){ smap[key]={年級:grade,班級:班別,座號:座號,姓名:姓名,性別:"",codes:[],evNames:[],indiv:0}; order.push(key); }
-          const st=smap[key];
-          joined.forEach(function(c){
-            if(st.codes.indexOf(c.ev["代碼"])>=0) return;
-            st.codes.push(c.ev["代碼"]);
-            st.evNames.push(c.ev["名稱"]+"("+c.ev["性別"]+")");
-            if(!st.性別) st.性別=c.ev["性別"];
-            if(String(c.ev["計入限報"])==="是") st.indiv++;
-            const ck=grade+"|"+班別+"|"+c.ev["代碼"];
-            evCount[ck]=(evCount[ck]||0)+1;
-          });
-        });
-      });
-      REG_ROWS = order.map(k=>{ const s=smap[k]; return Object.assign({}, s, {over: s.indiv>CONFIG.maxIndividual}); });
-      EVENT_OVER = Object.keys(evCount).filter(k=>evCount[k]>2).map(function(k){
-        const p=k.split("|"); const e=EVENTS.find(x=>x["代碼"]===p[2])||{};
-        return {班別:p[1], 項目:(e["名稱"]||p[2])+"("+(e["性別"]||"")+")", 人數:evCount[k]};
-      });
-      renderRegPreview();
-    }
-    function renderRegPreview(){
-      const box=el("r_preview");
-      if(!REG_ROWS.length){ box.innerHTML='<div class="error">讀不到有效資料。請確認：工作表名含 4/5/6，且有「班別、座號、姓名」欄與「男生60公尺…」項目欄。</div>'; return; }
-      const overN=REG_ROWS.filter(r=>r.over).length;
-      let warn="";
-      if(EVENT_OVER.length){
-        warn='<div class="api-warning">⚠ 下列項目同班報名超過 2 人（仍會匯入，請確認）：<br>'+
-          EVENT_OVER.map(o=>esc(o.班別+" "+o.項目+"："+o.人數+" 人")).join("；")+'</div>';
-      }
-      const rows=REG_ROWS.map(function(r){
-        const cls=r.over?'style="background:#fdecea"':'';
-        const note=r.over?`<span class="rank1">⚠ 報 ${r.indiv} 項，超過上限，不匯入</span>`:"OK";
-        return `<tr ${cls}><td>${esc(r.班級)}</td><td>${esc(r.座號)}</td><td>${esc(r.姓名)}</td>
-          <td>${esc(r.evNames.join("、"))}</td><td style="text-align:center">${r.indiv}</td><td>${note}</td></tr>`;
-      }).join("");
-      box.innerHTML=`<div class="notice">共 ${REG_ROWS.length} 位選手，其中 <b class="${overN?'rank1':''}">${overN}</b> 位超過每人 ${CONFIG.maxIndividual} 項（不匯入）。</div>${warn}
-        <div class="table-wrap"><table><thead><tr><th>班別</th><th>座號</th><th>姓名</th><th>報名項目</th><th>項目數</th><th>狀態</th></tr></thead>
-        <tbody>${rows}</tbody></table></div>
-        <div style="margin-top:12px"><button class="btn" id="r_import" type="button">確認匯入（略過超額者）</button></div>`;
-      el("r_import").addEventListener("click", doRegImport);
-    }
-    async function doRegImport(){
-      const students=REG_ROWS.filter(r=>!r.over && r.codes.length).map(r=>({年級:r.年級,班級:r.班級,座號:r.座號,姓名:r.姓名,性別:r.性別,codes:r.codes}));
-      if(!students.length) return toast("沒有可匯入的資料","err");
-      const b=el("r_import"); setBusy(b,true,"匯入中…");
-      try{
-        const res=await apiPost("importReg",{token:AUTH.token, students});
-        toast("匯入完成：新增 "+res.addedTotal+" 筆報名，超額略過 "+res.overCount+" 位","ok");
-        el("r_preview").innerHTML += '<div class="notice">✅ 已匯入 '+res.addedTotal+' 筆。</div>';
-      }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
-      finally{ setBusy(b,false); }
-    }
-    function downloadRegTemplate(){
-      if(!EVENTS.length) return toast("項目資料載入中，請稍候再試","err");
-      const wb=XLSX.utils.book_new();
-      // 填寫說明頁
-      const help=[
-        ["右昌國小運動會 — 報名匯入填寫說明"],
-        [""],
-        ["1. 本檔有『4年級／5年級／6年級』三個工作表，請在對應年級的工作表填寫。"],
-        ["2. 一位選手一列：填 班別、座號、姓名，再在他報名的項目欄位打 V（或任何符號）。"],
-        ["3. 每人最多報 2 個個人單項；每個項目同班最多 2 人。"],
-        ["4. 各工作表已放兩列『範例－』開頭的示範列，照著填即可；可刪除，不刪也沒關係（系統會自動略過『範例』字樣的列）。"],
-        ["5. 從範例列下方接著填你們班的選手。"],
-        ["6. 大隊接力／趣味競賽不在此表，另行處理。"],
-        [""],
-        ["填好後到網站上傳，系統會顯示預覽並檢查超額，確認後匯入。"]
-      ];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(help), "填寫說明");
-      // 各年級工作表
-      [["4","4年級"],["5","5年級"],["6","6年級"]].forEach(function(g){
-        const evs=EVENTS.filter(e=>String(e["組別"])===g[1] && String(e["類別"])==="個人單項" && String(e["啟用"])==="是");
-        const headers=evs.map(e=>(e["性別"]==="男"?"男生":e["性別"]==="女"?"女生":"")+e["名稱"]);
-        const head=["班別","座號","姓名"].concat(headers);
-        const blank=headers.map(()=>"");
-        const ex1=blank.slice(); if(headers.length){ex1[0]="V";} if(headers.length>2){ex1[2]="V";}
-        const ex2=blank.slice(); if(headers.length>1){ex2[1]="V";}
-        const aoa=[head,
-          [g[0]+"年1班","15","範例－王小明"].concat(ex1),
-          [g[0]+"年2班","8","範例－林小美"].concat(ex2)
-        ];
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), g[1]);
-      });
-      XLSX.writeFile(wb,"報名匯入範本_勾選式.xlsx");
+    /* ---- 秩序冊產生 ---- */
+    const USABLE_LANES = 4;
+    const LANE_COLORS = ["藍", "綠", "黃", "紅", "橘", "白"];
+    const SPRINT = ["60公尺", "100公尺", "200公尺"];
+    const FIELD = ["跳高", "跳遠", "壘球擲遠"];
+    const RELAY = ["400公尺接力", "大隊接力", "體育班大隊接力"];
+    let P_EVENTS = [], P_REGS = [], CLASS_ORDER = [];
+
+    function classNum(c) { const m = String(c).match(/(\d+)年(\d+)班/); return m ? Number(m[2]) : 999; }
+    function classCompare(a, b) { return classNum(a) - classNum(b); }
+
+    async function onGradeChange() {
+      const grade = el("grade").value;
+      el("drawCard").style.display = "none";
+      el("genCard").style.display = "none";
+      el("printBtn").style.display = "none";
+      el("bookletArea").innerHTML = "";
+      if (!grade) { el("loadArea").innerHTML = ""; return; }
+      el("loadArea").innerHTML = '<p class="muted">載入中…</p>';
+      try {
+        const [evD, regD] = await Promise.all([apiGet("events", { grade }), apiGet("reglist", { grade })]);
+        P_EVENTS = evD.events; P_REGS = regD.regs;
+        el("loadArea").innerHTML = `<div class="notice">共 ${P_EVENTS.length} 個項目，${P_REGS.length} 筆報名資料。</div>`;
+        const classes = Array.from(new Set(P_REGS.map(r => r["班級"]))).filter(Boolean);
+        classes.sort(classCompare);
+        CLASS_ORDER = classes;
+        if (!classes.length) { el("loadArea").innerHTML += '<div class="error">此年級目前尚無報名資料，無法產生秩序冊。</div>'; return; }
+        renderOrderList();
+        el("drawCard").style.display = "block";
+        el("genCard").style.display = "block";
+      } catch (e) { el("loadArea").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
 
-    /* ---- 共用：讀 Excel/CSV ---- */
-    function readSheetFile(file){
-      return new Promise(function(resolve,reject){
-        const fr=new FileReader();
-        fr.onload=function(e){
-          try{
-            const wb=XLSX.read(e.target.result,{type:"array"});
-            const ws=wb.Sheets[wb.SheetNames[0]];
-            resolve(XLSX.utils.sheet_to_json(ws,{defval:""}));
-          }catch(err){ reject(err); }
-        };
-        fr.onerror=reject; fr.readAsArrayBuffer(file);
+    function renderOrderList() {
+      el("laneTip").textContent = USABLE_LANES;
+      const box = el("orderList");
+      box.innerHTML = CLASS_ORDER.map(function (c, i) {
+        const batch = Math.floor(i / USABLE_LANES);
+        const color = LANE_COLORS[i % USABLE_LANES] || (i % USABLE_LANES + 1);
+        return `<div class="order-item">
+          <span class="muted" style="width:110px">第${batch + 1}批 · ${color}道</span>
+          <b style="flex:1">${esc(c)}</b>
+          <button class="btn ghost" type="button" data-act="up" data-i="${i}" ${i === 0 ? "disabled" : ""}>▲</button>
+          <button class="btn ghost" type="button" data-act="down" data-i="${i}" ${i === CLASS_ORDER.length - 1 ? "disabled" : ""}>▼</button>
+        </div>`;
+      }).join("");
+      box.querySelectorAll("button[data-act]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          const i = Number(b.dataset.i), j = b.dataset.act === "up" ? i - 1 : i + 1;
+          const tmp = CLASS_ORDER[i]; CLASS_ORDER[i] = CLASS_ORDER[j]; CLASS_ORDER[j] = tmp;
+          renderOrderList();
+        });
       });
+    }
+    function shuffleOrder() {
+      for (let i = CLASS_ORDER.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = CLASS_ORDER[i]; CLASS_ORDER[i] = CLASS_ORDER[j]; CLASS_ORDER[j] = tmp;
+      }
+      renderOrderList();
+    }
+
+    function regsForEvent(code) { return P_REGS.filter(function (r) { return r["項目代碼"] === code; }); }
+    function groupByClass(rows) {
+      const m = {};
+      rows.forEach(function (r) { const c = r["班級"]; (m[c] || (m[c] = [])).push(r); });
+      Object.keys(m).forEach(function (c) { m[c].sort(function (a, b) { return Number(a["座號"]) - Number(b["座號"]); }); });
+      return m;
+    }
+    function chunk(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; }
+    function cnNum(n) { const cn = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]; return cn[n - 1] || n; }
+
+    function renderSprintEvent(ev) {
+      const byClass = groupByClass(regsForEvent(ev["代碼"]));
+      const batches = chunk(CLASS_ORDER, USABLE_LANES);
+      let heatNum = 0, body = "";
+      batches.forEach(function (batch) {
+        const maxN = Math.max(0, ...batch.map(function (c) { return (byClass[c] || []).length; }));
+        if (!maxN) return;
+        body += `<table class="prog-table"><thead><tr><th>道次</th>${batch.map(function (c, i) {
+          return `<th>${i + 1}<br><span class="muted" style="font-weight:400">${LANE_COLORS[i]}道</span></th>`;
+        }).join("")}</tr></thead><tbody><tr><td class="lbl">班級</td>${batch.map(function (c) { return `<td>${esc(c)}</td>`; }).join("")}</tr>`;
+        for (let i = 0; i < maxN; i++) {
+          heatNum++;
+          body += `<tr><td class="lbl">第${cnNum(heatNum)}組</td>${batch.map(function (c) {
+            const s = (byClass[c] || [])[i]; return `<td>${s ? esc(s["姓名"]) : ""}</td>`;
+          }).join("")}</tr>`;
+        }
+        body += `</tbody></table>`;
+      });
+      if (!body) return "";
+      return `<div class="prog-event"><h3>${esc(ev["名稱"])}（${esc(ev["組別"])} ${esc(ev["性別"])}）</h3>${body}</div>`;
+    }
+    function renderFieldEvent(ev) {
+      const rows = regsForEvent(ev["代碼"]);
+      if (!rows.length) return "";
+      const byClass = groupByClass(rows);
+      const classes = Object.keys(byClass).sort(classCompare);
+      const list = [];
+      classes.forEach(function (c) { byClass[c].forEach(function (s) { list.push({ cls: c, name: s["姓名"] }); }); });
+      const trs = list.map(function (s, i) { return `<tr><td>${i + 1}</td><td>${esc(s.cls)}</td><td>${esc(s.name)}</td></tr>`; }).join("");
+      return `<div class="prog-event"><h3>${esc(ev["名稱"])}（${esc(ev["組別"])} ${esc(ev["性別"])}）</h3>
+        <table class="prog-table"><thead><tr><th>編號</th><th>班級</th><th>姓名</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+    }
+    function renderRelayEvent(ev) {
+      const rows = regsForEvent(ev["代碼"]);
+      if (!rows.length) return "";
+      const byClass = groupByClass(rows);
+      const classes = Object.keys(byClass).sort(classCompare);
+      const blocks = classes.map(function (c) {
+        return `<div style="margin-bottom:8px"><b>${esc(c)}</b>：${byClass[c].map(function (s) { return esc(s["姓名"]); }).join("、")}</div>`;
+      }).join("");
+      return `<div class="prog-event"><h3>${esc(ev["名稱"])}（${esc(ev["組別"])} ${esc(ev["性別"])}）</h3>${blocks}</div>`;
+    }
+
+    function generateBooklet() {
+      let html = `<div class="prog-cover"><h2>${esc(CONFIG.schoolName)} ${esc(CONFIG.eventTitle)}</h2><h3>${esc(el("grade").value)} 秩序冊</h3></div>`;
+      let any = false;
+      P_EVENTS.forEach(function (ev) {
+        const name = ev["名稱"]; let piece = "";
+        if (SPRINT.indexOf(name) >= 0) piece = renderSprintEvent(ev);
+        else if (FIELD.indexOf(name) >= 0) piece = renderFieldEvent(ev);
+        else if (RELAY.indexOf(name) >= 0) piece = renderRelayEvent(ev);
+        if (piece) { html += piece; any = true; }
+      });
+      if (!any) { toast("此年級尚無可產生的報名資料", "err"); return; }
+      el("bookletArea").innerHTML = html;
+      el("printBtn").style.display = "inline-block";
+      toast("秩序冊已產生", "ok");
     }
 
     el("loginBtn").addEventListener("click", login);
@@ -395,6 +450,11 @@
     el("a_pub").addEventListener("click", publishAnn);
     el("s_save").addEventListener("click", saveSchedule);
     el("s_cancelEdit").addEventListener("click", cancelEdit);
+    el("grade").addEventListener("change", onGradeChange);
+    el("shuffleBtn").addEventListener("click", shuffleOrder);
+    el("resetOrderBtn").addEventListener("click", function () { CLASS_ORDER.sort(classCompare); renderOrderList(); });
+    el("genBtn").addEventListener("click", generateBooklet);
+    el("printBtn").addEventListener("click", function () { window.print(); });
 
     loadAuth();
     document.addEventListener("DOMContentLoaded", function(){ if(AUTH&&AUTH.token) showPanels(); else initGoogle(); });
