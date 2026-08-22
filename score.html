@@ -45,6 +45,15 @@
       <div id="area" style="margin-top:14px"></div>
     </section>
 
+    <!-- 成績登錄進度總覽 -->
+    <section class="card" id="progressCard" style="display:none">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">成績登錄進度</h2>
+        <button class="btn ghost" id="p_refresh" type="button">重新整理</button>
+      </div>
+      <div id="p_out" style="margin-top:12px"><p class="muted">載入中…</p></div>
+    </section>
+
     <!-- Excel 匯入成績 -->
     <section class="card" id="importCard" style="display:none">
       <h2>Excel 匯入成績</h2>
@@ -119,9 +128,39 @@
     function showPanel() {
       el("loginCard").style.display = "none";
       el("panel").style.display = "block";
+      el("progressCard").style.display = "block";
       el("importCard").style.display = "block";
       el("who").textContent = AUTH.name + "（" + (AUTH.role === "admin" ? "管理者" : "老師") + "）";
       fillEvents();
+      loadProgress();
+    }
+
+    /* ---- 成績登錄進度總覽 ---- */
+    async function loadProgress() {
+      const box = el("p_out");
+      box.innerHTML = '<p class="muted">載入中…</p>';
+      try {
+        const [evD, regD, resD] = await Promise.all([apiGet("events"), apiGet("reglist"), apiGet("query")]);
+        const regCount = {}, resCount = {};
+        regD.regs.forEach(function (r) { const c = r["項目代碼"]; regCount[c] = (regCount[c] || 0) + 1; });
+        resD.results.forEach(function (r) { const c = r["項目代碼"]; resCount[c] = (resCount[c] || 0) + 1; });
+        const rows = evD.events.map(function (e) {
+          const code = e["代碼"], reg = regCount[code] || 0, done = resCount[code] || 0;
+          let status;
+          if (done === 0) status = reg > 0 ? '<span class="rank1">⚠ 尚未登錄</span>' : '<span class="muted">尚無報名</span>';
+          else if (reg && done < reg) status = '<span style="color:#8a5a10">部分登錄 (' + done + '/' + reg + ')</span>';
+          else status = '<span style="color:var(--green)">✅ 已登錄</span>';
+          return { code: code, name: e["名稱"], group: e["組別"], sex: e["性別"], reg: reg, done: done, status: status };
+        });
+        const doneN = rows.filter(function (r) { return r.done > 0; }).length;
+        const trs = rows.map(function (r) {
+          return `<tr><td>${esc(r.name)}</td><td>${esc(r.group)}</td><td>${esc(r.sex)}</td>
+            <td style="text-align:center">${r.reg}</td><td style="text-align:center">${r.done}</td><td>${r.status}</td></tr>`;
+        }).join("");
+        box.innerHTML = `<div class="notice">共 ${rows.length} 個項目，已有成績 ${doneN} 項，尚未登錄 ${rows.length - doneN} 項。</div>
+          <div class="table-wrap"><table><thead><tr><th>項目</th><th>組別</th><th>性別</th><th>報名人數</th><th>已登錄</th><th>狀態</th></tr></thead>
+          <tbody>${trs}</tbody></table></div>`;
+      } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
 
     async function fillEvents() {
@@ -295,6 +334,7 @@
     el("code").addEventListener("change", onPickEvent);
     el("s_file").addEventListener("change", onScoreFile);
     el("s_tpl").addEventListener("click", downloadScoreTemplate);
+    el("p_refresh").addEventListener("click", loadProgress);
 
     loadAuth();
     document.addEventListener("DOMContentLoaded", function () {
