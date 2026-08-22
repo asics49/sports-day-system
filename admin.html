@@ -53,6 +53,7 @@
         <option value="ann">發布公告</option>
         <option value="schedule">賽事行事曆管理</option>
         <option value="program">秩序冊產生</option>
+        <option value="reg">報名管理</option>
       </select>
       <p class="muted" style="font-size:13px;margin-top:8px">📥 報名匯入請到「<a href="register.html">線上報名</a>」頁（老師登入後即可批次上傳）。</p>
     </section>
@@ -140,6 +141,21 @@
       </section>
 
       <section id="bookletArea"></section>
+    </div>
+
+    <!-- 報名管理 -->
+    <div class="func-panel" id="regWrap" style="display:none">
+      <section class="card">
+        <h2>報名管理</h2>
+        <p class="muted">依年級（可加班級篩選）列出報名資料，逐筆刪除。常用來清掉測試資料或報錯的報名。</p>
+        <div class="grid2">
+          <div><label>年級</label><select id="r_grade"><option value="">全部</option><option>4年級</option><option>5年級</option><option>6年級</option></select></div>
+          <div><label>班級（選填）</label><input id="r_cls" placeholder="6年1班"></div>
+        </div>
+        <div style="margin-top:12px"><button class="btn" id="r_search" type="button">查詢</button></div>
+        <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+        <div id="r_list"><p class="muted">請設定條件後按「查詢」。</p></div>
+      </section>
     </div>
   </main>
 
@@ -315,6 +331,33 @@
       catch (e) { toast(e.message, "err"); }
     };
 
+    /* ---- 報名管理 ---- */
+    let REG_LIST = [];
+    async function searchReg() {
+      const box = el("r_list");
+      box.innerHTML = '<p class="muted">查詢中…</p>';
+      try {
+        const d = await apiGet("reglist", { grade: el("r_grade").value, cls: el("r_cls").value.trim() });
+        REG_LIST = d.regs.slice().sort((a, b) => classCompare(a["班級"], b["班級"]) || Number(a["座號"]) - Number(b["座號"]));
+        if (!REG_LIST.length) { box.innerHTML = '<p class="muted">查無報名資料。</p>'; return; }
+        box.innerHTML = `<div class="notice">共 ${REG_LIST.length} 筆。</div>
+          <div class="table-wrap"><table><thead><tr><th>年級</th><th>班級</th><th>座號</th><th>姓名</th><th>項目</th><th>類別</th><th></th></tr></thead>
+          <tbody>${REG_LIST.map((r, i) => `<tr>
+            <td>${esc(r["年級"])}</td><td>${esc(r["班級"])}</td><td>${esc(r["座號"])}</td><td>${esc(r["姓名"])}</td>
+            <td>${esc(r["項目名稱"])}</td><td class="muted">${esc(r["類別"])}</td>
+            <td><button class="btn red" style="padding:4px 10px" onclick="delReg(${i})">刪除</button></td>
+          </tr>`).join("")}</tbody></table></div>`;
+      } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+    window.delReg = async function (i) {
+      const r = REG_LIST[i]; if (!r) return;
+      if (!confirm(`確定刪除「${r["班級"]} ${r["姓名"]}」的「${r["項目名稱"]}」報名？`)) return;
+      try {
+        await apiPost("deletereg", { token: AUTH.token, 年級: r["年級"], 班級: r["班級"], 座號: r["座號"], 項目代碼: r["項目代碼"] });
+        toast("已刪除", "ok"); searchReg();
+      } catch (e) { toast(e.message, "err"); if (/登入/.test(e.message)) { clearAuth(); location.reload(); } }
+    };
+
     /* ---- 秩序冊產生 ---- */
     const USABLE_LANES = 4;
     const LANE_COLORS = ["藍", "綠", "黃", "紅", "橘", "白"];
@@ -475,6 +518,7 @@
     el("a_pub").addEventListener("click", publishAnn);
     el("s_save").addEventListener("click", saveSchedule);
     el("s_cancelEdit").addEventListener("click", cancelEdit);
+    el("r_search").addEventListener("click", searchReg);
     el("grade").addEventListener("change", onGradeChange);
     el("shuffleBtn").addEventListener("click", shuffleOrder);
     el("resetOrderBtn").addEventListener("click", resetGrid);
