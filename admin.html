@@ -368,6 +368,7 @@
     const RELAY = ["400公尺接力", "大隊接力", "體育班大隊接力"];
     let P_EVENTS = [], P_REGS = [], LANE_GRID = [];
     let LANE_NUMBERS = [2, 3, 4, 5];  // 右昌操場實際可用道次（跑道隆起，只用2~5道），可自行改成實際道次
+    let LANE_LABELS = LANE_COLORS.slice(0, USABLE_LANES);  // 各道次的接力棒顏色，可自行修改文字
 
     function classNum(c) { const m = String(c).match(/(\d+)年(\d+)班/); return m ? Number(m[2]) : 999; }
     function classCompare(a, b) { return classNum(a) - classNum(b); }
@@ -419,9 +420,12 @@
       el("laneTip").textContent = USABLE_LANES;
       const box = el("orderList");
       let html = '<table class="prog-table"><thead><tr><th>道次<br>組別</th>' +
-        LANE_COLORS.slice(0, USABLE_LANES).map(function (c, i) {
-          return `<th><input type="text" class="lane-num" data-l="${i}" value="${esc(LANE_NUMBERS[i])}" style="width:40px;text-align:center;font-weight:700;color:inherit;border:1px solid var(--line);border-radius:6px;background:#fff">
-            <br><span class="muted" style="font-weight:400">${c}道</span></th>`;
+        LANE_NUMBERS.map(function (_, i) {
+          return `<th>
+            <input type="text" class="lane-num" data-l="${i}" value="${esc(LANE_NUMBERS[i])}" style="width:36px;text-align:center;font-weight:700;color:inherit;border:1px solid var(--line);border-radius:6px;background:#fff">道
+            <br>
+            <input type="text" class="lane-label" data-l="${i}" value="${esc(LANE_LABELS[i])}" style="width:48px;text-align:center;font-weight:400;color:#888;border:1px solid var(--line);border-radius:6px;background:#fff">棒
+          </th>`;
         }).join("") +
         '</tr></thead><tbody>';
       LANE_GRID.forEach(function (batch, bi) {
@@ -434,6 +438,9 @@
       box.innerHTML = html;
       box.querySelectorAll(".lane-num").forEach(function (inp) {
         inp.addEventListener("input", function () { LANE_NUMBERS[Number(inp.dataset.l)] = inp.value.trim(); });
+      });
+      box.querySelectorAll(".lane-label").forEach(function (inp) {
+        inp.addEventListener("input", function () { LANE_LABELS[Number(inp.dataset.l)] = inp.value.trim(); });
       });
       box.querySelectorAll(".grid-cell").forEach(function (inp) {
         inp.addEventListener("input", function () {
@@ -485,7 +492,7 @@
         const maxN = Math.max(0, ...batch.map(function (c) { return c ? (byClass[c] || []).length : 0; }));
         if (!maxN) return;
         body += `<table class="prog-table"><thead><tr><th>道次</th>${batch.map(function (c, i) {
-          return `<th>${esc(LANE_NUMBERS[i])}<br><span class="muted" style="font-weight:400">${LANE_COLORS[i]}道</span></th>`;
+          return `<th>${esc(LANE_NUMBERS[i])}道<br><span class="muted" style="font-weight:400">${esc(LANE_LABELS[i])}棒</span></th>`;
         }).join("")}</tr></thead><tbody><tr><td class="lbl">班級</td>${batch.map(function (c) { return `<td>${esc(c)}</td>`; }).join("")}</tr>`;
         for (let i = 0; i < maxN; i++) {
           heatNum++;
