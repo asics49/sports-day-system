@@ -16,8 +16,6 @@
     .prog-event { margin-bottom: 22px; padding-bottom: 10px; border-bottom: 2px dashed var(--line); }
     .prog-event h3 { color: var(--gold-d); margin-bottom: 6px; }
     .prog-cover { text-align: center; margin-bottom: 24px; }
-    .order-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; }
-    .order-item button { padding: 2px 10px; }
     @media print {
       .site-header, .site-nav, .site-footer, .no-print, #loginCard { display: none !important; }
       .prog-event { page-break-after: always; border-bottom: none; }
@@ -117,11 +115,15 @@
 
       <section class="card no-print" id="drawCard" style="display:none">
         <h2>短跑分道抽籤順序</h2>
-        <p class="muted">60/100/200 公尺會依此順序，每 <b id="laneTip">4</b> 班一組排道次（比照往年紙本抽籤方式）。
-          請用 ▲▼ 調整成實際抽籤結果，或按「隨機排序」由系統代抽。跳高/跳遠/壘球擲遠與接力類不受此順序影響，一律依班級序排列。</p>
+        <p class="muted">60/100/200 公尺會依下表排道次（比照往年紙本抽籤方式），每批最多 <b id="laneTip">4</b> 道。
+          系統已依報名班級自動排好，你也可以<b>直接在格子裡打班級名稱</b>自行填入/調整（比照實際抽籤結果），空格代表該道次從缺。
+          跳高/跳遠/壘球擲遠與接力類不受此表影響，一律依班級序排列。</p>
         <div class="row">
           <button class="btn ghost" id="shuffleBtn" type="button">隨機排序</button>
           <button class="btn ghost" id="resetOrderBtn" type="button">依班級序重設</button>
+          <button class="btn ghost" id="addBatchBtn" type="button">＋ 新增一批</button>
+          <button class="btn ghost" id="removeBatchBtn" type="button">－ 移除最後一批</button>
+          <button class="btn ghost" id="clearGridBtn" type="button">清空重填</button>
         </div>
         <div id="orderList" style="margin-top:12px"></div>
       </section>
@@ -319,10 +321,21 @@
     const SPRINT = ["60公尺", "100公尺", "200公尺"];
     const FIELD = ["跳高", "跳遠", "壘球擲遠"];
     const RELAY = ["400公尺接力", "大隊接力", "體育班大隊接力"];
-    let P_EVENTS = [], P_REGS = [], CLASS_ORDER = [];
+    let P_EVENTS = [], P_REGS = [], LANE_GRID = [];
 
     function classNum(c) { const m = String(c).match(/(\d+)年(\d+)班/); return m ? Number(m[2]) : 999; }
     function classCompare(a, b) { return classNum(a) - classNum(b); }
+
+    function buildGridFromClasses(classes) {
+      const grid = [];
+      for (let i = 0; i < classes.length; i += USABLE_LANES) {
+        const batch = classes.slice(i, i + USABLE_LANES);
+        while (batch.length < USABLE_LANES) batch.push("");
+        grid.push(batch);
+      }
+      if (!grid.length) grid.push(new Array(USABLE_LANES).fill(""));
+      return grid;
+    }
 
     async function onGradeChange() {
       const grade = el("grade").value;
@@ -338,41 +351,55 @@
         el("loadArea").innerHTML = `<div class="notice">共 ${P_EVENTS.length} 個項目，${P_REGS.length} 筆報名資料。</div>`;
         const classes = Array.from(new Set(P_REGS.map(r => r["班級"]))).filter(Boolean);
         classes.sort(classCompare);
-        CLASS_ORDER = classes;
         if (!classes.length) { el("loadArea").innerHTML += '<div class="error">此年級目前尚無報名資料，無法產生秩序冊。</div>'; return; }
-        renderOrderList();
+        LANE_GRID = buildGridFromClasses(classes);
+        renderGrid();
         el("drawCard").style.display = "block";
         el("genCard").style.display = "block";
       } catch (e) { el("loadArea").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
 
-    function renderOrderList() {
+    /* ---- 分道表格（可直接打字填班級/道次） ---- */
+    function renderGrid() {
       el("laneTip").textContent = USABLE_LANES;
       const box = el("orderList");
-      box.innerHTML = CLASS_ORDER.map(function (c, i) {
-        const batch = Math.floor(i / USABLE_LANES);
-        const color = LANE_COLORS[i % USABLE_LANES] || (i % USABLE_LANES + 1);
-        return `<div class="order-item">
-          <span class="muted" style="width:110px">第${batch + 1}批 · ${color}道</span>
-          <b style="flex:1">${esc(c)}</b>
-          <button class="btn ghost" type="button" data-act="up" data-i="${i}" ${i === 0 ? "disabled" : ""}>▲</button>
-          <button class="btn ghost" type="button" data-act="down" data-i="${i}" ${i === CLASS_ORDER.length - 1 ? "disabled" : ""}>▼</button>
-        </div>`;
-      }).join("");
-      box.querySelectorAll("button[data-act]").forEach(function (b) {
-        b.addEventListener("click", function () {
-          const i = Number(b.dataset.i), j = b.dataset.act === "up" ? i - 1 : i + 1;
-          const tmp = CLASS_ORDER[i]; CLASS_ORDER[i] = CLASS_ORDER[j]; CLASS_ORDER[j] = tmp;
-          renderOrderList();
+      let html = '<table class="prog-table"><thead><tr><th>批次</th>' +
+        LANE_COLORS.slice(0, USABLE_LANES).map(function (c, i) { return `<th>${i + 1}道<br><span class="muted" style="font-weight:400">${c}</span></th>`; }).join("") +
+        '</tr></thead><tbody>';
+      LANE_GRID.forEach(function (batch, bi) {
+        html += `<tr><td class="lbl">第${bi + 1}批</td>` +
+          batch.map(function (cls, li) {
+            return `<td><input type="text" class="grid-cell" data-b="${bi}" data-l="${li}" value="${esc(cls)}" placeholder="班級" style="width:100px;text-align:center"></td>`;
+          }).join("") + `</tr>`;
+      });
+      html += '</tbody></table>';
+      box.innerHTML = html;
+      box.querySelectorAll(".grid-cell").forEach(function (inp) {
+        inp.addEventListener("input", function () {
+          LANE_GRID[Number(inp.dataset.b)][Number(inp.dataset.l)] = inp.value.trim();
         });
       });
     }
     function shuffleOrder() {
-      for (let i = CLASS_ORDER.length - 1; i > 0; i--) {
+      const flat = LANE_GRID.flat().filter(Boolean);
+      for (let i = flat.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        const tmp = CLASS_ORDER[i]; CLASS_ORDER[i] = CLASS_ORDER[j]; CLASS_ORDER[j] = tmp;
+        const tmp = flat[i]; flat[i] = flat[j]; flat[j] = tmp;
       }
-      renderOrderList();
+      LANE_GRID = buildGridFromClasses(flat);
+      renderGrid();
+    }
+    function resetGrid() {
+      const classes = Array.from(new Set(P_REGS.map(r => r["班級"]))).filter(Boolean).sort(classCompare);
+      LANE_GRID = buildGridFromClasses(classes);
+      renderGrid();
+    }
+    function addBatch() { LANE_GRID.push(new Array(USABLE_LANES).fill("")); renderGrid(); }
+    function removeBatch() { if (LANE_GRID.length > 1) { LANE_GRID.pop(); renderGrid(); } }
+    function clearGrid() {
+      if (!confirm("確定清空目前表格，改成自行從頭填入嗎？")) return;
+      LANE_GRID = LANE_GRID.map(function () { return new Array(USABLE_LANES).fill(""); });
+      renderGrid();
     }
 
     function regsForEvent(code) { return P_REGS.filter(function (r) { return r["項目代碼"] === code; }); }
@@ -382,15 +409,13 @@
       Object.keys(m).forEach(function (c) { m[c].sort(function (a, b) { return Number(a["座號"]) - Number(b["座號"]); }); });
       return m;
     }
-    function chunk(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; }
     function cnNum(n) { const cn = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]; return cn[n - 1] || n; }
 
     function renderSprintEvent(ev) {
       const byClass = groupByClass(regsForEvent(ev["代碼"]));
-      const batches = chunk(CLASS_ORDER, USABLE_LANES);
       let heatNum = 0, body = "";
-      batches.forEach(function (batch) {
-        const maxN = Math.max(0, ...batch.map(function (c) { return (byClass[c] || []).length; }));
+      LANE_GRID.forEach(function (batch) {
+        const maxN = Math.max(0, ...batch.map(function (c) { return c ? (byClass[c] || []).length : 0; }));
         if (!maxN) return;
         body += `<table class="prog-table"><thead><tr><th>道次</th>${batch.map(function (c, i) {
           return `<th>${i + 1}<br><span class="muted" style="font-weight:400">${LANE_COLORS[i]}道</span></th>`;
@@ -398,7 +423,7 @@
         for (let i = 0; i < maxN; i++) {
           heatNum++;
           body += `<tr><td class="lbl">第${cnNum(heatNum)}組</td>${batch.map(function (c) {
-            const s = (byClass[c] || [])[i]; return `<td>${s ? esc(s["姓名"]) : ""}</td>`;
+            const s = c ? (byClass[c] || [])[i] : null; return `<td>${s ? esc(s["姓名"]) : ""}</td>`;
           }).join("")}</tr>`;
         }
         body += `</tbody></table>`;
@@ -452,7 +477,10 @@
     el("s_cancelEdit").addEventListener("click", cancelEdit);
     el("grade").addEventListener("change", onGradeChange);
     el("shuffleBtn").addEventListener("click", shuffleOrder);
-    el("resetOrderBtn").addEventListener("click", function () { CLASS_ORDER.sort(classCompare); renderOrderList(); });
+    el("resetOrderBtn").addEventListener("click", resetGrid);
+    el("addBatchBtn").addEventListener("click", addBatch);
+    el("removeBatchBtn").addEventListener("click", removeBatch);
+    el("clearGridBtn").addEventListener("click", clearGrid);
     el("genBtn").addEventListener("click", generateBooklet);
     el("printBtn").addEventListener("click", function () { window.print(); });
 
