@@ -42,9 +42,12 @@
         if (!data.announcements.length) { box.innerHTML = '<p class="muted">目前尚無公告。</p>'; return; }
         box.innerHTML = data.announcements.map(function (a) {
           const pin = String(a["置頂"]) === "是" ? '<span class="pin">📌 置頂</span>' : "";
+          let files = []; try { const j = JSON.parse(a["附件"] || "[]"); if (Array.isArray(j)) files = j; } catch (e) {}
+          const attach = files.length ? '<div style="margin-top:6px">' + files.map(f =>
+            `<a href="${esc(f.url)}" target="_blank" rel="noopener" style="margin-right:12px">📎 ${esc(f.name)}</a>`).join("") + '</div>' : "";
           return `<div class="ann"><div class="date">${fmtDate(a["日期"])}</div>
                   <div class="title">${esc(a["標題"])}${pin}</div>
-                  <div>${esc(a["內容"])}</div></div>`;
+                  <div>${esc(a["內容"])}</div>${attach}</div>`;
         }).join("");
       } catch (e) {
         box.innerHTML = '<p class="muted">' + esc(e.message) + '</p>';

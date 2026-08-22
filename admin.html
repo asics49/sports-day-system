@@ -45,6 +45,9 @@
       </div>
       <label>標題 *</label><input id="a_title" placeholder="例：報名開始">
       <label>內容</label><textarea id="a_body" rows="3" placeholder="公告內容…"></textarea>
+      <label>附件（選填，可多選；圖片/PDF/Word/Excel 等）</label>
+      <input type="file" id="a_files" multiple>
+      <div id="a_fileTip" class="muted" style="font-size:13px;margin-top:4px"></div>
       <div style="margin-top:12px"><button class="btn" id="a_pub" type="button">發布公告</button></div>
       <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
       <h3 style="color:var(--gold-d)">目前公告</h3>
@@ -99,6 +102,15 @@
     async function loadEvents(){ try{ const d=await apiGet("events"); EVENTS=d.events; }catch(e){} }
 
     /* ---- 公告 ---- */
+    function parseAttachments(json){
+      if(!json) return [];
+      try{ const a=JSON.parse(json); return Array.isArray(a)?a:[]; }catch(e){ return []; }
+    }
+    function renderAttachLinks(json){
+      const files=parseAttachments(json);
+      if(!files.length) return "";
+      return '<div style="margin-top:4px">'+files.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener" style="margin-right:10px">📎 ${esc(f.name)}</a>`).join("")+'</div>';
+    }
     async function loadAnn(){
       const box=el("a_list");
       try{
@@ -107,19 +119,41 @@
         box.innerHTML = d.announcements.map(function(a){
           const pin = String(a["置頂"])==="是" ? '<span class="pin">📌</span>' : "";
           return `<div class="ann" style="display:flex;justify-content:space-between;gap:10px;align-items:start">
-            <div><div class="date">${fmtDate(a["日期"])} ${pin}</div><div class="title">${esc(a["標題"])}</div><div class="muted">${esc(a["內容"])}</div></div>
+            <div><div class="date">${fmtDate(a["日期"])} ${pin}</div><div class="title">${esc(a["標題"])}</div><div class="muted">${esc(a["內容"])}</div>${renderAttachLinks(a["附件"])}</div>
             <button class="btn red" style="padding:5px 12px;flex:0 0 auto" onclick='delAnn(${JSON.stringify(String(a["標題"]))},${JSON.stringify(String(a["內容"]||""))})'>刪除</button>
           </div>`;
         }).join("");
       }catch(e){ box.innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
     }
+    function fileToBase64(file){
+      return new Promise(function(resolve,reject){
+        const fr=new FileReader();
+        fr.onload=function(){ resolve(String(fr.result).split(",")[1]); };
+        fr.onerror=reject; fr.readAsDataURL(file);
+      });
+    }
+    async function uploadAllFiles(files){
+      const out=[];
+      for(let i=0;i<files.length;i++){
+        const f=files[i];
+        el("a_fileTip").textContent="上傳中… ("+(i+1)+"/"+files.length+") "+f.name;
+        const base64=await fileToBase64(f);
+        const res=await apiPost("uploadAttachment",{token:AUTH.token, filename:f.name, mimeType:f.type||"application/octet-stream", base64});
+        out.push({name:res.name, url:res.url});
+      }
+      el("a_fileTip").textContent="";
+      return out;
+    }
     async function publishAnn(){
       const title=el("a_title").value.trim();
       if(!title) return toast("請填標題","err");
+      const files=Array.from(el("a_files").files||[]);
       const b=el("a_pub"); setBusy(b,true,"發布中…");
       try{
-        await apiPost("addAnnouncement",{token:AUTH.token, 日期:el("a_date").value, 標題:title, 內容:el("a_body").value.trim(), 置頂:el("a_pin").value});
-        toast("公告已發布","ok"); el("a_title").value=""; el("a_body").value=""; loadAnn();
+        let attach=[];
+        if(files.length) attach=await uploadAllFiles(files);
+        await apiPost("addAnnouncement",{token:AUTH.token, 日期:el("a_date").value, 標題:title, 內容:el("a_body").value.trim(), 置頂:el("a_pin").value, 附件: attach.length?JSON.stringify(attach):""});
+        toast("公告已發布","ok"); el("a_title").value=""; el("a_body").value=""; el("a_files").value=""; loadAnn();
       }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
       finally{ setBusy(b,false); }
     }
