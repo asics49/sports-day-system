@@ -351,7 +351,7 @@
         el("loadArea").innerHTML = `<div class="notice">共 ${P_EVENTS.length} 個項目，${P_REGS.length} 筆報名資料。</div>`;
         const classes = Array.from(new Set(P_REGS.map(r => r["班級"]))).filter(Boolean);
         classes.sort(classCompare);
-        if (!classes.length) { el("loadArea").innerHTML += '<div class="error">此年級目前尚無報名資料，無法產生秩序冊。</div>'; return; }
+        if (!classes.length) { el("loadArea").innerHTML += '<div class="notice">此年級目前尚無報名資料。你可以先在下方表格自行輸入班級測試排版，或等報名資料進來後按「依班級序重設」自動帶入。</div>'; }
         LANE_GRID = buildGridFromClasses(classes);
         renderGrid();
         el("drawCard").style.display = "block";
