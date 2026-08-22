@@ -190,6 +190,12 @@
 
     /* ---- 賽事行事曆管理 ---- */
     let SCHEDULE = [], EDIT_ID = "";
+    function toDateInput(d) {
+      if (!d) return "";
+      const dt = new Date(d);
+      if (isNaN(dt)) return String(d);
+      return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+    }
     async function loadSchedule() {
       const box = el("s_list");
       try {
@@ -199,7 +205,7 @@
         const rows = SCHEDULE.slice().sort((a, b) => String(a["日期"]).localeCompare(String(b["日期"])) || String(a["時間"]).localeCompare(String(b["時間"])));
         box.innerHTML = rows.map(function (r) {
           return `<div class="ann" style="display:flex;justify-content:space-between;gap:10px;align-items:start">
-            <div><div class="date">${esc(r["日期"])} ${esc(r["時間"] || "")}</div>
+            <div><div class="date">${esc(toDateInput(r["日期"]))} ${esc(r["時間"] || "")}</div>
               <div class="title">${esc(r["項目"])}${r["年級"] ? '　<span class="muted">' + esc(r["年級"]) + '</span>' : ''}</div>
               <div class="muted">${esc(r["地點"] || "")}${r["檢錄時間"] ? '　檢錄：' + esc(r["檢錄時間"]) : ''}${r["備註"] ? '　' + esc(r["備註"]) : ''}</div>
             </div>
@@ -214,7 +220,7 @@
     window.editSched = function (id) {
       const r = SCHEDULE.find(x => String(x["編號"]) === String(id)); if (!r) return;
       EDIT_ID = id;
-      el("s_date").value = r["日期"]; el("s_grade").value = r["年級"] || ""; el("s_item").value = r["項目"];
+      el("s_date").value = toDateInput(r["日期"]); el("s_grade").value = r["年級"] || ""; el("s_item").value = r["項目"];
       el("s_time").value = r["時間"] || ""; el("s_place").value = r["地點"] || ""; el("s_checkin").value = r["檢錄時間"] || ""; el("s_note").value = r["備註"] || "";
       el("s_save").textContent = "更新此筆賽程"; el("s_cancelEdit").style.display = "inline-block";
       window.scrollTo({ top: 0, behavior: "smooth" });
