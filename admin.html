@@ -116,14 +116,15 @@
 
       <section class="card no-print" id="drawCard" style="display:none">
         <h2>短跑分道抽籤順序</h2>
-        <p class="muted">60/100/200 公尺會依下表排道次（比照往年紙本抽籤方式），每批最多 <b id="laneTip">4</b> 道。
-          系統已依報名班級自動排好，你也可以<b>直接在格子裡打班級名稱</b>自行填入/調整（比照實際抽籤結果），空格代表該道次從缺。
+        <p class="muted">60/100/200 公尺會依下表排道次（比照往年紙本抽籤方式），每組最多 <b id="laneTip">4</b> 道。
+          系統已依報名班級自動排好，你也可以<b>直接在格子裡打班級</b>自行填入/調整（比照實際抽籤結果），空格代表該道次從缺。
+          班級可以打完整的「6年1班」，也可以打簡寫「601」（年級+2碼班級序號），系統會自動判讀。
           跳高/跳遠/壘球擲遠與接力類不受此表影響，一律依班級序排列。</p>
         <div class="row">
           <button class="btn ghost" id="shuffleBtn" type="button">隨機排序</button>
           <button class="btn ghost" id="resetOrderBtn" type="button">依班級序重設</button>
-          <button class="btn ghost" id="addBatchBtn" type="button">＋ 新增一批</button>
-          <button class="btn ghost" id="removeBatchBtn" type="button">－ 移除最後一批</button>
+          <button class="btn ghost" id="addBatchBtn" type="button">＋ 新增一組</button>
+          <button class="btn ghost" id="removeBatchBtn" type="button">－ 移除最後一組</button>
           <button class="btn ghost" id="clearGridBtn" type="button">清空重填</button>
         </div>
         <div id="orderList" style="margin-top:12px"></div>
@@ -402,17 +403,26 @@
       } catch (e) { el("loadArea").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
 
+    // 班級輸入容錯：允許打「6年1班」或簡寫「601」（年級+2碼班級序號，比照往年紙本代碼）
+    function normalizeClass(s) {
+      s = String(s || "").trim();
+      if (!s) return "";
+      const m = s.match(/^([456])(\d{2})$/);
+      if (m) return m[1] + "年" + Number(m[2]) + "班";
+      return s;
+    }
+
     /* ---- 分道表格（可直接打字填班級/道次） ---- */
     function renderGrid() {
       el("laneTip").textContent = USABLE_LANES;
       const box = el("orderList");
-      let html = '<table class="prog-table"><thead><tr><th>批次</th>' +
-        LANE_COLORS.slice(0, USABLE_LANES).map(function (c, i) { return `<th>${i + 1}道<br><span class="muted" style="font-weight:400">${c}</span></th>`; }).join("") +
+      let html = '<table class="prog-table"><thead><tr><th>道次<br>組別</th>' +
+        LANE_COLORS.slice(0, USABLE_LANES).map(function (c, i) { return `<th>${i + 1}<br><span class="muted" style="font-weight:400">${c}道</span></th>`; }).join("") +
         '</tr></thead><tbody>';
       LANE_GRID.forEach(function (batch, bi) {
-        html += `<tr><td class="lbl">第${bi + 1}批</td>` +
+        html += `<tr><td class="lbl">第${cnNum(bi + 1)}組</td>` +
           batch.map(function (cls, li) {
-            return `<td><input type="text" class="grid-cell" data-b="${bi}" data-l="${li}" value="${esc(cls)}" placeholder="班級" style="width:100px;text-align:center"></td>`;
+            return `<td><input type="text" class="grid-cell" data-b="${bi}" data-l="${li}" value="${esc(cls)}" placeholder="6年1班 或 601" style="width:100px;text-align:center"></td>`;
           }).join("") + `</tr>`;
       });
       html += '</tbody></table>';
@@ -420,6 +430,11 @@
       box.querySelectorAll(".grid-cell").forEach(function (inp) {
         inp.addEventListener("input", function () {
           LANE_GRID[Number(inp.dataset.b)][Number(inp.dataset.l)] = inp.value.trim();
+        });
+        inp.addEventListener("blur", function () {
+          const norm = normalizeClass(inp.value);
+          inp.value = norm;
+          LANE_GRID[Number(inp.dataset.b)][Number(inp.dataset.l)] = norm;
         });
       });
     }
@@ -457,7 +472,8 @@
     function renderSprintEvent(ev) {
       const byClass = groupByClass(regsForEvent(ev["代碼"]));
       let heatNum = 0, body = "";
-      LANE_GRID.forEach(function (batch) {
+      LANE_GRID.forEach(function (rawBatch) {
+        const batch = rawBatch.map(normalizeClass);
         const maxN = Math.max(0, ...batch.map(function (c) { return c ? (byClass[c] || []).length : 0; }));
         if (!maxN) return;
         body += `<table class="prog-table"><thead><tr><th>道次</th>${batch.map(function (c, i) {
