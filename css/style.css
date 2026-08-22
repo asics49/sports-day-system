@@ -33,9 +33,8 @@ h1, h2, h3 { line-height: 1.3; }
 .banner {
   position: relative;
   width: 100%;
-  height: clamp(140px, 20vw, 300px);   /* 滿版寬度、高度壓低 */
-  /* 對齊偏上，保留校名，裁切點落在下方緞帶處 */
-  background: #fff url("../assets/banner.jpg") center 32% / cover no-repeat;
+  aspect-ratio: 2400 / 480;             /* 專用網頁橫幅比例 5:1，滿版且完整顯示不裁切 */
+  background: #fff url("../assets/banner.jpg") center/cover no-repeat;
 }
 .banner-text {
   position: absolute; left: 0; right: 0; bottom: 0;
