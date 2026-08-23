@@ -21,8 +21,9 @@ function renderHeader() {
   }).join("");
 
   // 首頁的橫幅改用影片背景（其他頁面維持靜態圖片，避免每頁都重複載入影片）
+  // 不加 loop：播完一次後瀏覽器會自動停在最後一格，不需要額外處理
   const bannerMedia = page === "home"
-    ? `<video class="banner-video" autoplay muted loop playsinline poster="assets/banner.jpg">
+    ? `<video class="banner-video" autoplay muted playsinline poster="assets/banner.jpg">
          <source src="assets/banner.mp4" type="video/mp4">
        </video>`
     : "";
