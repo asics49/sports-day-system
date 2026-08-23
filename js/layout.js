@@ -20,10 +20,18 @@ function renderHeader() {
     return `<a href="${n.href}" class="${n.key === page ? "active" : ""}">${n.label}</a>`;
   }).join("");
 
+  // 首頁的橫幅改用影片背景（其他頁面維持靜態圖片，避免每頁都重複載入影片）
+  const bannerMedia = page === "home"
+    ? `<video class="banner-video" autoplay muted loop playsinline poster="assets/banner.jpg">
+         <source src="assets/banner.mp4" type="video/mp4">
+       </video>`
+    : "";
+
   const header = document.createElement("header");
   header.className = "site-header";
   header.innerHTML = `
     <div class="banner" role="img" aria-label="${CONFIG.schoolName}運動會橫幅">
+      ${bannerMedia}
       <div class="banner-text">
         <h1>${CONFIG.schoolName}</h1>
         <p>${CONFIG.eventTitle}</p>
