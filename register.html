@@ -149,7 +149,7 @@
         html+=groups[cat].map(function(e){
           const counts=String(e["計入限報"])==="是";
           const badge=counts?'<span class="badge">計入</span>':'<span class="badge no">不計入</span>';
-          return `<label class="ev" data-count="${counts?1:0}"><input type="checkbox" value="${e["代碼"]}">
+          return `<label class="ev" data-count="${counts?1:0}"><input type="checkbox" value="${esc(e["代碼"])}">
             <span><span class="name">${esc(e["名稱"])}</span>${badge}<br><span class="meta">${esc(e["組別"])} · ${esc(e["性別"])}</span></span></label>`;
         }).join("");
         html+=`</div>`;
@@ -236,7 +236,9 @@
     }
     function renderRegPreview(){
       const box=el("r_preview");
-      if(!REG_ROWS.length){ box.innerHTML='<div class="error">讀不到有效資料。請確認工作表名含 4/5/6，且有「班別、座號、姓名」欄與「男生60公尺…」項目欄。</div>'; return; }
+      if(!REG_ROWS.length){
+        const gradeHint = AUTH.grade ? `此帳號僅能匯入「${esc(AUTH.grade)}」，請確認檔案裡有名稱含「${esc(AUTH.grade.charAt(0))}」的工作表，` : "請確認工作表名含 4/5/6，";
+        box.innerHTML='<div class="error">讀不到有效資料。'+gradeHint+'且有「班別、座號、姓名」欄與「男生60公尺…」項目欄。</div>'; return; }
       const overN=REG_ROWS.filter(r=>r.over).length;
       let warn=""; if(EVENT_OVER.length){ warn='<div class="api-warning">⚠ 下列項目同班報名超過 2 人（仍會匯入，請確認）：<br>'+EVENT_OVER.map(o=>esc(o.班別+" "+o.項目+"："+o.人數+" 人")).join("；")+'</div>'; }
       const rows=REG_ROWS.map(function(r){ const cls=r.over?'style="background:#fdecea"':'';
@@ -292,8 +294,10 @@
     el("r_tpl").addEventListener("click", downloadRegTemplate);
 
     loadAuth();
+    // 舊版登入存的 AUTH 沒有 grade 欄位，無法判斷是否限定年級 → 要求重新登入一次
+    if(AUTH&&AUTH.token&&!("grade" in AUTH)) clearAuth();
     document.addEventListener("DOMContentLoaded", function(){ if(AUTH&&AUTH.token) showReg(); else initGoogle(); });
-    function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+    function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   </script>
 </body>
 </html>
