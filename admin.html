@@ -182,8 +182,11 @@
           <div><label>密碼 <span id="u_pwHint" class="muted"></span></label><input id="u_pw" type="password" autocomplete="new-password"></div>
           <div><label>角色</label><select id="u_role"><option value="teacher">teacher（老師）</option><option value="admin">admin（管理者）</option></select></div>
         </div>
-        <label>啟用</label>
-        <select id="u_enabled"><option value="是">是</option><option value="否">否</option></select>
+        <div class="grid2">
+          <div><label>啟用</label><select id="u_enabled"><option value="是">是</option><option value="否">否</option></select></div>
+          <div><label>限定年級 <span class="muted">（選填；設定後此帳號登入只能報該年級）</span></label>
+            <select id="u_grade"><option value="">不限制</option><option value="4年級">4年級</option><option value="5年級">5年級</option><option value="6年級">6年級</option></select></div>
+        </div>
         <div style="margin-top:12px">
           <button class="btn" id="u_save" type="button">新增帳號</button>
           <button class="btn ghost" id="u_cancelEdit" type="button" style="display:none">取消編輯</button>
@@ -391,7 +394,7 @@
         box.innerHTML = USER_LIST.map(function (r, i) {
           return `<div class="ann" style="display:flex;justify-content:space-between;gap:10px;align-items:start">
             <div><div class="title">${esc(r["姓名"] || "（未填姓名）")}　<span class="muted">${esc(r["Email"])}</span></div>
-              <div class="muted">${r["角色"] === "admin" ? "管理者" : "老師"}　${r["啟用"] === "否" ? "已停用" : "啟用中"}</div>
+              <div class="muted">${r["角色"] === "admin" ? "管理者" : "老師"}　${r["啟用"] === "否" ? "已停用" : "啟用中"}${r["限定年級"] ? "　限定：" + esc(r["限定年級"]) : ""}</div>
             </div>
             <div class="row" style="flex:0 0 auto">
               <button class="btn ghost" style="padding:5px 12px" onclick="editUser(${i})">編輯</button>
@@ -408,18 +411,19 @@
       el("u_pw").value = ""; el("u_pwHint").textContent = "（留空＝不變更）";
       el("u_role").value = r["角色"] === "admin" ? "admin" : "teacher";
       el("u_enabled").value = r["啟用"] === "否" ? "否" : "是";
+      el("u_grade").value = r["限定年級"] || "";
       el("u_save").textContent = "更新此帳號"; el("u_cancelEdit").style.display = "inline-block";
       window.scrollTo({ top: 0, behavior: "smooth" });
     };
     function cancelUserEdit() {
       EDIT_USER_EMAIL = ""; el("u_save").textContent = "新增帳號"; el("u_cancelEdit").style.display = "none";
       el("u_email").value = ""; el("u_name").value = ""; el("u_pw").value = ""; el("u_pwHint").textContent = "";
-      el("u_role").value = "teacher"; el("u_enabled").value = "是";
+      el("u_role").value = "teacher"; el("u_enabled").value = "是"; el("u_grade").value = "";
     }
     async function saveUser() {
       const payload = {
         Email: el("u_email").value.trim(), 姓名: el("u_name").value.trim(),
-        密碼: el("u_pw").value, 角色: el("u_role").value, 啟用: el("u_enabled").value
+        密碼: el("u_pw").value, 角色: el("u_role").value, 啟用: el("u_enabled").value, 限定年級: el("u_grade").value
       };
       if (!payload.Email) return toast("請填 Email", "err");
       if (!EDIT_USER_EMAIL && !payload.密碼) return toast("新增帳號請設定密碼", "err");

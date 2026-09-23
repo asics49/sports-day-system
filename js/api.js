@@ -7,6 +7,20 @@ function apiReady() {
   return CONFIG.API_URL && CONFIG.API_URL.indexOf("PASTE_YOUR") < 0;
 }
 
+// 把 fetch 回應轉成 JSON；若回來的不是 JSON（常見於學校網路擋 script.google.com、
+// 或連線被防火牆/代理攔截成一頁 HTML），丟出看得懂的錯誤而不是原始的 JS parse error。
+async function parseApiResponse(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    const hint = /^\s*<!DOCTYPE|^\s*<html/i.test(text)
+      ? "（伺服器回傳的是網頁而不是資料，通常代表目前的網路連不到 Google 服務——換一個網路〔例如手機熱點〕再試看看，或確認學校網路沒有擋 script.google.com。）"
+      : "";
+    throw new Error("伺服器回應異常，無法解析（HTTP " + res.status + "）" + hint);
+  }
+}
+
 async function apiGet(action, params) {
   if (!apiReady()) throw new Error("尚未連線後端：請先在 js/config.js 填入 API_URL。");
   const url = new URL(CONFIG.API_URL);
@@ -16,7 +30,7 @@ async function apiGet(action, params) {
       url.searchParams.set(k, params[k]);
   });
   const res = await fetch(url.toString(), { method: "GET" });
-  const data = await res.json();
+  const data = await parseApiResponse(res);
   if (data.ok === false) throw new Error(data.error || "查詢失敗");
   return data;
 }
@@ -30,7 +44,7 @@ async function apiPost(action, body) {
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify(payload),
   });
-  const data = await res.json();
+  const data = await parseApiResponse(res);
   if (data.ok === false) throw new Error(data.error || "送出失敗");
   return data;
 }
