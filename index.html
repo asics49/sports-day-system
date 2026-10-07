@@ -47,7 +47,7 @@
             `<a href="${esc(f.url)}" target="_blank" rel="noopener" style="margin-right:12px">📎 ${esc(f.name)}</a>`).join("") + '</div>' : "";
           return `<div class="ann"><div class="date">${fmtDate(a["日期"])}</div>
                   <div class="title">${esc(a["標題"])}${pin}</div>
-                  <div>${esc(a["內容"])}</div>${attach}</div>`;
+                  <div>${linkify(a["內容"])}</div>${attach}</div>`;
         }).join("");
       } catch (e) {
         box.innerHTML = '<p class="muted">' + esc(e.message) + '</p>';

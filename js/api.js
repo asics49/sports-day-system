@@ -52,6 +52,20 @@ async function apiPost(action, body) {
 /* ---- 小工具 ---- */
 function el(id) { return document.getElementById(id); }
 
+// 先整段跳脫再把網址換成超連結，所以內容裡的 HTML 不會被執行。
+// 網址只比對 ASCII 字元，「請看https://x.com報名」這種黏著中文的寫法也能正確切開。
+function linkify(s) {
+  const t = String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+  return t.replace(/(?:https?:\/\/|www\.)[A-Za-z0-9\-._~:/?#\[\]@!$&()*+,;=%]+/g, function (m) {
+    let url = m, tail = "";
+    while (/[.,!?)\]]$/.test(url)) { tail = url.slice(-1) + tail; url = url.slice(0, -1); }
+    const href = /^www\./.test(url) ? "https://" + url : url;
+    return '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + url + "</a>" + tail;
+  });
+}
+
 function toast(msg, type) {
   let box = el("toast");
   if (!box) {
