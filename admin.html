@@ -6,7 +6,7 @@
   <title>管理 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20261008b">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
   <style>
@@ -56,6 +56,7 @@
         <option value="reg">報名管理</option>
         <option value="user">帳號管理</option>
       </select>
+      <div id="noPermMsg" class="notice" style="display:none;margin-top:8px">此帳號沒有任何管理功能的權限。報名請到「<a href="register.html">線上報名</a>」、成績輸入請到「<a href="score.html">成績輸入</a>」；需要其他權限請洽管理者。</div>
       <p class="muted" style="font-size:13px;margin-top:8px">📥 報名匯入請到「<a href="register.html">線上報名</a>」頁（老師登入後即可批次上傳）。</p>
     </section>
 
@@ -187,6 +188,8 @@
           <div><label>限定年級 <span class="muted">（選填；設定後此帳號登入只能報該年級）</span></label>
             <select id="u_grade"><option value="">不限制</option><option value="4年級">4年級</option><option value="5年級">5年級</option><option value="6年級">6年級</option></select></div>
         </div>
+        <label style="margin-top:10px">可使用的功能 <span id="u_permHint" class="muted">（admin 角色一律全部可用）</span></label>
+        <div id="u_perms" style="display:flex;flex-wrap:wrap;gap:14px;margin-top:4px"></div>
         <div style="margin-top:12px">
           <button class="btn" id="u_save" type="button">新增帳號</button>
           <button class="btn ghost" id="u_cancelEdit" type="button" style="display:none">取消編輯</button>
@@ -198,9 +201,9 @@
     </div>
   </main>
 
-  <script src="js/config.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/layout.js"></script>
+  <script src="js/config.js?v=20261008b"></script>
+  <script src="js/api.js?v=20261008b"></script>
+  <script src="js/layout.js?v=20261008b"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [];
@@ -239,12 +242,38 @@
       el("loginCard").style.display="none";
       el("whoCard").style.display="block";
       el("who").textContent = AUTH.name + "（" + (AUTH.role==="admin"?"管理者":"老師") + "）";
-      const userOpt = el("funcSelect").querySelector('option[value="user"]');
-      if (userOpt) userOpt.style.display = AUTH.role === "admin" ? "" : "none";
-      if (AUTH.role !== "admin" && el("funcSelect").value === "user") el("funcSelect").value = "ann";
+      // 依帳號權限只留可用的功能；帳號管理只有 admin
+      const allowed = Array.from(el("funcSelect").options).filter(function(o){
+        const ok = o.value === "user" ? AUTH.role === "admin" : hasPerm(AUTH, FUNC_PERM[o.value]);
+        o.hidden = !ok; o.disabled = !ok;
+        return ok;
+      });
+      if (!allowed.length) {
+        el("funcSelect").style.display = "none";
+        document.querySelectorAll(".func-panel").forEach(function(p){ p.style.display = "none"; });
+        el("noPermMsg").style.display = "block";
+        return;
+      }
+      el("funcSelect").style.display = ""; el("noPermMsg").style.display = "none";
+      if (allowed.indexOf(el("funcSelect").selectedOptions[0]) < 0) el("funcSelect").value = allowed[0].value;
       showFunc(el("funcSelect").value);
-      loadEvents(); loadAnn(); loadSchedule();
+      loadEvents();
+      if (hasPerm(AUTH, "公告")) loadAnn();
+      if (hasPerm(AUTH, "行事曆")) loadSchedule();
       if (AUTH.role === "admin") loadUsers();
+    }
+    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理" };
+
+    // 新增/刪除類動作若結果在 Google 轉址那段遺失（ApiLostResponse），後端可能其實做完了：
+    // 不自動重送（會重複新增），改成重新載入清單讓使用者看實際狀態。
+    function handleWriteErr(e, reload) {
+      if (e instanceof ApiLostResponse) {
+        toast(e.message + " 動作可能已完成，已重新載入清單，請確認後再決定要不要重做。", "err");
+        if (reload) reload();
+        return;
+      }
+      toast(e.message, "err");
+      if (/登入/.test(e.message)) { clearAuth(); location.reload(); }
     }
 
     /* ---- 功能切換 ---- */
@@ -312,14 +341,14 @@
         if(files.length) attach=await uploadAllFiles(files);
         await apiPost("addAnnouncement",{token:AUTH.token, 日期:el("a_date").value, 標題:title, 內容:el("a_body").value.trim(), 置頂:el("a_pin").value, 附件: attach.length?JSON.stringify(attach):""});
         toast("公告已發布","ok"); el("a_title").value=""; el("a_body").value=""; el("a_files").value=""; loadAnn();
-      }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
+      }catch (e) { handleWriteErr(e, loadAnn); }
       finally{ setBusy(b,false); }
     }
     window.delAnn = async function(i){
       const a = ANN_LIST[i]; if(!a) return;
       if(!confirm(`確定刪除公告「${a["標題"]}」？`)) return;
       try{ await apiPost("deleteAnnouncement",{token:AUTH.token, 標題:String(a["標題"]), 內容:String(a["內容"]||"")}); toast("已刪除","ok"); loadAnn(); }
-      catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
+      catch (e) { handleWriteErr(e, loadAnn); }
     };
 
     /* ---- 賽事行事曆管理 ---- */
@@ -374,17 +403,29 @@
         if (EDIT_ID) { await apiPost("updateSchedule", Object.assign({ token: AUTH.token, 編號: EDIT_ID }, payload)); toast("已更新賽程", "ok"); }
         else { await apiPost("addSchedule", Object.assign({ token: AUTH.token }, payload)); toast("已新增賽程", "ok"); }
         cancelEdit(); loadSchedule();
-      } catch (e) { toast(e.message, "err"); if (/登入/.test(e.message)) { clearAuth(); location.reload(); } }
+      } catch (e) { handleWriteErr(e, loadSchedule); }
       finally { setBusy(b, false); }
     }
     window.delSched = async function (id) {
       if (!confirm("確定刪除這筆賽程？")) return;
       try { await apiPost("deleteSchedule", { token: AUTH.token, 編號: id }); toast("已刪除", "ok"); loadSchedule(); }
-      catch (e) { toast(e.message, "err"); }
+      catch (e) { handleWriteErr(e, loadSchedule); }
     };
 
     /* ---- 帳號管理 ---- */
     let USER_LIST = [], EDIT_USER_EMAIL = "";
+    // 和後端 PERMS 一致；預設＝老師原本的範圍
+    const ALL_PERMS = ["報名", "成績", "公告", "行事曆", "秩序冊", "報名管理"];
+    const DEFAULT_PERMS = ["報名", "成績"];
+    el("u_perms").innerHTML = ALL_PERMS.map(p => `<label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="u_perm" value="${p}" style="width:auto">${p}</label>`).join("");
+    function setPermBoxes(list) { document.querySelectorAll(".u_perm").forEach(c => c.checked = list.indexOf(c.value) >= 0); }
+    function syncPermBoxesToRole() {
+      const isAdmin = el("u_role").value === "admin";
+      document.querySelectorAll(".u_perm").forEach(c => { c.disabled = isAdmin; if (isAdmin) c.checked = true; });
+      el("u_permHint").style.display = isAdmin ? "" : "none";
+    }
+    el("u_role").addEventListener("change", syncPermBoxesToRole);
+    setPermBoxes(DEFAULT_PERMS); syncPermBoxesToRole();
     async function loadUsers() {
       const box = el("u_list");
       try {
@@ -395,6 +436,7 @@
           return `<div class="ann" style="display:flex;justify-content:space-between;gap:10px;align-items:start">
             <div><div class="title">${esc(r["姓名"] || "（未填姓名）")}　<span class="muted">${esc(r["Email"])}</span></div>
               <div class="muted">${r["角色"] === "admin" ? "管理者" : "老師"}　${r["啟用"] === "否" ? "已停用" : "啟用中"}${r["限定年級"] ? "　限定：" + esc(r["限定年級"]) : ""}</div>
+              <div class="muted" style="font-size:13px">權限：${r["角色"] === "admin" ? "全部（含帳號管理）" : (r["權限"] && r["權限"].length ? r["權限"].map(esc).join("、") : "無")}${r["角色"] !== "admin" && r["權限未設定"] ? "（未設定，使用預設）" : ""}</div>
             </div>
             <div class="row" style="flex:0 0 auto">
               <button class="btn ghost" style="padding:5px 12px" onclick="editUser(${i})">編輯</button>
@@ -412,6 +454,7 @@
       el("u_role").value = r["角色"] === "admin" ? "admin" : "teacher";
       el("u_enabled").value = r["啟用"] === "否" ? "否" : "是";
       el("u_grade").value = r["限定年級"] || "";
+      setPermBoxes(r["權限"] || []); syncPermBoxesToRole();
       el("u_save").textContent = "更新此帳號"; el("u_cancelEdit").style.display = "inline-block";
       window.scrollTo({ top: 0, behavior: "smooth" });
     };
@@ -419,11 +462,13 @@
       EDIT_USER_EMAIL = ""; el("u_save").textContent = "新增帳號"; el("u_cancelEdit").style.display = "none";
       el("u_email").value = ""; el("u_name").value = ""; el("u_pw").value = ""; el("u_pwHint").textContent = "";
       el("u_role").value = "teacher"; el("u_enabled").value = "是"; el("u_grade").value = "";
+      setPermBoxes(DEFAULT_PERMS); syncPermBoxesToRole();
     }
     async function saveUser() {
       const payload = {
         Email: el("u_email").value.trim(), 姓名: el("u_name").value.trim(),
-        密碼: el("u_pw").value, 角色: el("u_role").value, 啟用: el("u_enabled").value, 限定年級: el("u_grade").value
+        密碼: el("u_pw").value, 角色: el("u_role").value, 啟用: el("u_enabled").value, 限定年級: el("u_grade").value,
+        權限: Array.from(document.querySelectorAll(".u_perm:checked")).map(c => c.value)
       };
       if (!payload.Email) return toast("請填 Email", "err");
       if (!EDIT_USER_EMAIL && !payload.密碼) return toast("新增帳號請設定密碼", "err");
@@ -432,14 +477,14 @@
         if (EDIT_USER_EMAIL) { await apiPost("updateUser", Object.assign({ token: AUTH.token, 原Email: EDIT_USER_EMAIL }, payload)); toast("已更新帳號", "ok"); }
         else { await apiPost("addUser", Object.assign({ token: AUTH.token }, payload)); toast("已新增帳號", "ok"); }
         cancelUserEdit(); loadUsers();
-      } catch (e) { toast(e.message, "err"); if (/登入/.test(e.message)) { clearAuth(); location.reload(); } }
+      } catch (e) { handleWriteErr(e, loadUsers); }
       finally { setBusy(b, false); }
     }
     window.delUser = async function (i) {
       const r = USER_LIST[i]; if (!r) return;
       if (!confirm("確定刪除帳號「" + r["Email"] + "」？")) return;
       try { await apiPost("deleteUser", { token: AUTH.token, Email: r["Email"] }); toast("已刪除", "ok"); loadUsers(); }
-      catch (e) { toast(e.message, "err"); }
+      catch (e) { handleWriteErr(e, loadUsers); }
     };
 
     /* ---- 報名管理 ---- */
@@ -497,7 +542,7 @@
         await apiPost("deletereg", { token: AUTH.token, 年級: r["年級"], 班級: r["班級"], 座號: r["座號"], 項目代碼: r["項目代碼"] });
         REG_LIST.splice(i, 1); renderRegList();
         toast("已刪除", "ok");
-      } catch (e) { toast(e.message, "err"); if (/登入/.test(e.message)) { clearAuth(); location.reload(); } }
+      } catch (e) { handleWriteErr(e, searchReg); }
     };
     // 勾選的全部一次送給後端（原本是一筆一個請求、排隊等，選越多越久）
     async function delRegSelected() {
@@ -744,6 +789,7 @@
     el("printBtn").addEventListener("click", function () { window.print(); });
 
     loadAuth();
+    if (isStaleAuth(AUTH)) clearAuth();
     document.addEventListener("DOMContentLoaded", function(){ if(AUTH&&AUTH.token) showPanels(); else initGoogle(); });
     function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
     function fmtDate(d){ if(!d) return ""; try{return new Date(d).toLocaleDateString("zh-TW");}catch(e){return String(d);} }

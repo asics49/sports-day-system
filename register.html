@@ -6,7 +6,7 @@
   <title>線上報名 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20261008b">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
 </head>
@@ -72,9 +72,9 @@
     </section>
   </main>
 
-  <script src="js/config.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/layout.js"></script>
+  <script src="js/config.js?v=20261008b"></script>
+  <script src="js/api.js?v=20261008b"></script>
+  <script src="js/layout.js?v=20261008b"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [], ALLEVENTS = [], REG_ROWS = [], EVENT_OVER = [], LAST_SHEET_NAMES = [];
@@ -105,6 +105,10 @@
       finally{ setBusy(b,false); }
     }
     function showReg(){
+      if (!hasPerm(AUTH, "報名")) {
+        el("loginMsg").innerHTML='<div class="error">「'+esc(AUTH.name)+'」這個帳號沒有「報名」權限，請改用其他帳號登入，或洽管理者開通。</div>';
+        clearAuth(); return;
+      }
       el("loginCard").style.display="none";
       document.querySelectorAll(".reg-panel").forEach(p=>p.style.display="block");
       el("who").textContent = AUTH.name + "（" + (AUTH.role==="admin"?"管理者":"老師") + "）";
@@ -197,7 +201,14 @@
         el("warn").innerHTML='<div class="notice">✅ '+esc(res.msg)+'</div>';
         document.querySelectorAll(".ev input:checked").forEach(c=>{c.checked=false;c.closest(".ev").classList.remove("checked");});
         updateCounter(); checkMine();
-      }catch(e){ el("warn").innerHTML='<div class="error">'+esc(e.message)+'</div>'; toast(e.message,"err"); }
+      }catch(e){
+        if(e instanceof ApiLostResponse){
+          // 報名可能其實已寫入：自動查一次該生報名紀錄給老師看，不要直接叫他重送
+          el("warn").innerHTML='<div class="error">'+esc(e.message)+'報名可能已經成功，下方是這位學生目前的報名紀錄，請確認後再決定是否重送。</div>';
+          checkMine();
+        } else { el("warn").innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
+        toast(e.message,"err");
+      }
       finally{ setBusy(btn,false); }
     }
 
@@ -295,7 +306,7 @@
         const res=await apiPost("importReg",{token:AUTH.token,students});
         const already=Math.max(0, requested-res.addedTotal);
         const msg=[`新增 <b>${res.addedTotal}</b> 筆報名`];
-        if(already) msg.push(`<b>${already}</b> 筆原本就已經報名過（不會重複新增）`);
+        if(already) msg.push(`另有 <b>${already}</b> 筆已經在系統裡（之前報過，或剛才已寫入、系統自動重送），不會重複新增`);
         if(res.overCount) msg.push(`<b>${res.overCount}</b> 位超過每人上限未匯入`);
         out.innerHTML='<div class="notice">✅ 匯入完成：'+msg.join("；")+'。</div>';
         toast("匯入完成","ok");
@@ -346,7 +357,7 @@
 
     loadAuth();
     // 舊版登入存的 AUTH 沒有 grade 欄位，無法判斷是否限定年級 → 要求重新登入一次
-    if(AUTH&&AUTH.token&&!("grade" in AUTH)) clearAuth();
+    if(isStaleAuth(AUTH)) clearAuth();
     document.addEventListener("DOMContentLoaded", function(){ if(AUTH&&AUTH.token) showReg(); else initGoogle(); });
     function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   </script>

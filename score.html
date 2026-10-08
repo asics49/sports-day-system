@@ -6,7 +6,7 @@
   <title>成績輸入 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20261008b">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
 </head>
@@ -67,9 +67,9 @@
     </section>
   </main>
 
-  <script src="js/config.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/layout.js"></script>
+  <script src="js/config.js?v=20261008b"></script>
+  <script src="js/api.js?v=20261008b"></script>
+  <script src="js/layout.js?v=20261008b"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [], REG = [];
@@ -126,6 +126,10 @@
     }
 
     function showPanel() {
+      if (!hasPerm(AUTH, "成績")) {
+        el("loginMsg").innerHTML = '<div class="error">「' + esc(AUTH.name) + '」這個帳號沒有「成績輸入」權限，請改用其他帳號登入，或洽管理者開通。</div>';
+        clearAuth(); return;
+      }
       el("loginCard").style.display = "none";
       el("panel").style.display = "block";
       el("progressCard").style.display = "block";
@@ -337,11 +341,12 @@
     el("p_refresh").addEventListener("click", loadProgress);
 
     loadAuth();
+    if (isStaleAuth(AUTH)) clearAuth();
     document.addEventListener("DOMContentLoaded", function () {
       if (AUTH && AUTH.token) showPanel();
       else initGoogle();
     });
-    function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+    function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   </script>
 </body>
 </html>
