@@ -451,6 +451,13 @@
       try {
         const d = await apiGet("reglist", { grade: el("r_grade").value, cls: el("r_cls").value.trim() });
         REG_LIST = d.regs.slice().sort((a, b) => classCompare(a["班級"], b["班級"]) || Number(a["座號"]) - Number(b["座號"]));
+        renderRegList();
+      } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+    // 刪除後直接改 REG_LIST 重畫，不再重新查詢（每次打 API 都要等試算表，很慢）
+    function renderRegList() {
+      const box = el("r_list");
+      el("r_toolbar").style.display = "none";
         if (!REG_LIST.length) { box.innerHTML = '<p class="muted">查無報名資料。</p>'; return; }
         box.innerHTML = `<div class="notice">共 ${REG_LIST.length} 筆。</div>
           <div class="table-wrap"><table><thead><tr><th></th><th>年級</th><th>班級</th><th>座號</th><th>姓名</th><th>項目</th><th>類別</th><th></th></tr></thead>
@@ -478,7 +485,6 @@
             updateSelCount();
           });
         });
-      } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
     function updateSelCount() {
       const n = document.querySelectorAll(".r_chk:checked").length;
@@ -489,25 +495,26 @@
       if (!confirm(`確定刪除「${r["班級"]} ${r["姓名"]}」的「${r["項目名稱"]}」報名？`)) return;
       try {
         await apiPost("deletereg", { token: AUTH.token, 年級: r["年級"], 班級: r["班級"], 座號: r["座號"], 項目代碼: r["項目代碼"] });
-        toast("已刪除", "ok"); searchReg();
+        REG_LIST.splice(i, 1); renderRegList();
+        toast("已刪除", "ok");
       } catch (e) { toast(e.message, "err"); if (/登入/.test(e.message)) { clearAuth(); location.reload(); } }
     };
+    // 勾選的全部一次送給後端（原本是一筆一個請求、排隊等，選越多越久）
     async function delRegSelected() {
       const idxs = Array.from(document.querySelectorAll(".r_chk:checked")).map(chk => Number(chk.dataset.i));
       if (!idxs.length) return toast("請先勾選要刪除的項目", "err");
       if (!confirm(`確定刪除已選取的 ${idxs.length} 筆報名資料？`)) return;
       const btn = el("r_delSelected"); setBusy(btn, true, "刪除中…");
-      let ok = 0, fail = 0;
-      for (const i of idxs) {
-        const r = REG_LIST[i]; if (!r) continue;
-        try {
-          await apiPost("deletereg", { token: AUTH.token, 年級: r["年級"], 班級: r["班級"], 座號: r["座號"], 項目代碼: r["項目代碼"] });
-          ok++;
-        } catch (e) { fail++; }
-      }
-      setBusy(btn, false);
-      toast(`已刪除 ${ok} 筆${fail ? "，失敗 " + fail + " 筆" : ""}`, fail ? "err" : "ok");
-      searchReg();
+      const items = idxs.map(i => REG_LIST[i]).filter(Boolean).map(r => ({ 年級: r["年級"], 班級: r["班級"], 座號: r["座號"], 項目代碼: r["項目代碼"] }));
+      try {
+        const res = await apiPost("deleteregbatch", { token: AUTH.token, items });
+        const gone = new Set(idxs);
+        REG_LIST = REG_LIST.filter((_, i) => !gone.has(i));
+        renderRegList();
+        toast(`已刪除 ${res.deleted} 筆${res.notFound ? "，找不到 " + res.notFound + " 筆（可能已被刪除）" : ""}`, "ok");
+      } catch (e) {
+        toast(e.message, "err"); if (/登入/.test(e.message)) { clearAuth(); location.reload(); }
+      } finally { setBusy(btn, false); }
     }
 
     /* ---- 秩序冊產生 ---- */
