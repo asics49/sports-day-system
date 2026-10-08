@@ -77,7 +77,7 @@
   <script src="js/layout.js"></script>
   <script>
     const AUTH_KEY = "yc_auth";
-    let AUTH = null, EVENTS = [], ALLEVENTS = [], REG_ROWS = [], EVENT_OVER = [];
+    let AUTH = null, EVENTS = [], ALLEVENTS = [], REG_ROWS = [], EVENT_OVER = [], LAST_SHEET_NAMES = [];
     el("maxTip").textContent = CONFIG.maxIndividual;
     el("maxTip2").textContent = CONFIG.maxIndividual;
 
@@ -109,7 +109,21 @@
       document.querySelectorAll(".reg-panel").forEach(p=>p.style.display="block");
       el("who").textContent = AUTH.name + "（" + (AUTH.role==="admin"?"管理者":"老師") + "）";
       lockGradeToAccount();
-      apiGet("events").then(d=>{ ALLEVENTS=d.events; }).catch(()=>{});
+      ensureAllEvents().catch(()=>{});
+    }
+
+    // Excel 範本/匯入都需要全部項目；API 冷啟動可能要等幾十秒，所以用同一個 Promise 等它，而不是叫老師「稍候再試」
+    let ALLEVENTS_P = null;
+    function ensureAllEvents(){
+      if (ALLEVENTS.length) return Promise.resolve();
+      if (!ALLEVENTS_P) ALLEVENTS_P = apiGet("events").then(d=>{ ALLEVENTS=d.events; }).catch(e=>{ ALLEVENTS_P=null; throw e; });
+      return ALLEVENTS_P;
+    }
+    // 老師常把班別寫成 401；統一成「4年1班」，不然跟逐人報名、秩序冊、查詢的班級對不起來
+    function normalizeClass(s){
+      s=String(s||"").replace(/\s/g,"");
+      const m=s.match(/^([456])(\d{2})$/);
+      return m ? m[1]+"年"+Number(m[2])+"班" : s;
     }
 
     // 若這個帳號設定了「限定年級」（例如各年級專用的報名帳號），鎖住年級選單，
@@ -203,17 +217,35 @@
           resolve(wb.SheetNames.map(n=>({name:n,rows:XLSX.utils.sheet_to_json(wb.Sheets[n],{defval:""})}))); }catch(err){reject(err);} };
         fr.onerror=reject; fr.readAsArrayBuffer(file); });
     }
+    // 所有結果（含錯誤）都寫在 r_preview 裡，不只跳一下就消失的 toast——老師才看得到發生什麼事
     async function onRegFile(ev){
-      const f=ev.target.files[0]; if(!f) return;
-      if(!ALLEVENTS.length){ return toast("項目資料載入中，請稍候再試","err"); }
-      let sheets; try{ sheets=await readAllSheets(f); }catch(e){ return toast("讀檔失敗："+e.message,"err"); }
+      const input=ev.target, f=input.files[0]; if(!f) return;
+      const box=el("r_preview");
+      try{
+        box.innerHTML='<p class="muted">讀取「'+esc(f.name)+'」中…</p>';
+        if(!ALLEVENTS.length){
+          box.innerHTML='<p class="muted">項目資料載入中，第一次可能要等十幾秒，請不要關閉頁面…</p>';
+          try{ await ensureAllEvents(); }
+          catch(e){ box.innerHTML='<div class="error">項目資料載入失敗：'+esc(e.message)+'。請重新整理頁面後再選一次檔案。</div>'; return; }
+        }
+        let sheets; try{ sheets=await readAllSheets(f); }
+        catch(e){ box.innerHTML='<div class="error">讀檔失敗：'+esc(e.message)+'。請確認是 Excel 檔（.xlsx），建議用「下載範本」的檔案填寫。</div>'; return; }
+        parseRegSheets(sheets);
+      }catch(e){
+        box.innerHTML='<div class="error">處理檔案時發生錯誤：'+esc(e.message)+'</div>';
+      }finally{
+        input.value=""; // 清掉，同一個檔案改完再選一次才會重新觸發
+      }
+    }
+    function parseRegSheets(sheets){
+      LAST_SHEET_NAMES = sheets.map(s=>s.name);
       const smap={}, order=[], evCount={};
       sheets.forEach(function(sh){
         const grade=sheetGrade(sh.name); if(!grade||!sh.rows.length) return;
         if(AUTH.grade && grade!==AUTH.grade) return; // 帳號限定年級時，忽略其他年級的工作表
         const cols=Object.keys(sh.rows[0]).map(h=>({h,ev:headerToEvent(h,grade)})).filter(c=>c.ev);
         sh.rows.forEach(function(r){
-          const 班別=String(r["班別"]||r["班級"]||"").trim(), 座號=String(r["座號"]||"").trim(), 姓名=String(r["姓名"]||"").trim();
+          const 班別=normalizeClass(r["班別"]||r["班級"]), 座號=String(r["座號"]||"").trim(), 姓名=String(r["姓名"]||"").trim();
           if(!班別||!姓名) return;
           if(/範例|說明|請刪除/.test(班別)||/範例|請刪除/.test(姓名)) return;
           const joined=cols.filter(c=>String(r[c.h]||"").trim()!=="");
@@ -238,7 +270,8 @@
       const box=el("r_preview");
       if(!REG_ROWS.length){
         const gradeHint = AUTH.grade ? `此帳號僅能匯入「${esc(AUTH.grade)}」，請確認檔案裡有名稱含「${esc(AUTH.grade.charAt(0))}」的工作表，` : "請確認工作表名含 4/5/6，";
-        box.innerHTML='<div class="error">讀不到有效資料。'+gradeHint+'且有「班別、座號、姓名」欄與「男生60公尺…」項目欄。</div>'; return; }
+        const found = LAST_SHEET_NAMES.length ? `<br>這個檔案裡的工作表：${LAST_SHEET_NAMES.map(esc).join("、")}` : "";
+        box.innerHTML='<div class="error">讀不到有效資料。'+gradeHint+'且有「班別、座號、姓名」欄與「男生60公尺…」項目欄，項目欄打 V。'+found+'<br>建議按「下載範本」重新取得範本填寫。</div>'; return; }
       const overN=REG_ROWS.filter(r=>r.over).length;
       let warn=""; if(EVENT_OVER.length){ warn='<div class="api-warning">⚠ 下列項目同班報名超過 2 人（仍會匯入，請確認）：<br>'+EVENT_OVER.map(o=>esc(o.班別+" "+o.項目+"："+o.人數+" 人")).join("；")+'</div>'; }
       const rows=REG_ROWS.map(function(r){ const cls=r.over?'style="background:#fdecea"':'';
@@ -260,8 +293,12 @@
       }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
       finally{ setBusy(b,false); }
     }
-    function downloadRegTemplate(){
-      if(!ALLEVENTS.length) return toast("項目資料載入中，請稍候再試","err");
+    async function downloadRegTemplate(){
+      if(!ALLEVENTS.length){
+        // 按鈕裡有巢狀 span（tplBtnGrades），不能用 setBusy 蓋 textContent
+        toast("項目資料載入中，載完會自動下載…");
+        try{ await ensureAllEvents(); }catch(e){ return toast("項目資料載入失敗："+e.message,"err"); }
+      }
       const wb=XLSX.utils.book_new();
       const help=[["右昌國小運動會 — 報名匯入填寫說明"],[""],
         [AUTH.grade ? "1. 本檔只有『" + AUTH.grade + "』工作表（此帳號僅能報名該年級）。" : "1. 本檔有『4年級／5年級／6年級』三個工作表，請在對應年級填寫。"],
