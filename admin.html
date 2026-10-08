@@ -6,7 +6,7 @@
   <title>管理 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261008b">
+  <link rel="stylesheet" href="css/style.css?v=20261008c">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
   <style>
@@ -151,16 +151,20 @@
     <div class="func-panel" id="regWrap" style="display:none">
       <section class="card">
         <h2>報名管理</h2>
-        <p class="muted">依年級（可加班級篩選）列出報名資料，可逐筆刪除，也可以勾選整班或全選後一次刪除。常用來清掉測試資料或報錯的報名。</p>
+        <p class="muted">依年級（可加班級篩選）列出報名資料，並顯示統計（各年級已報名班數、各項目人數、各班×項目、超過名額與班級寫法錯誤提醒），可匯出 Excel。也可逐筆刪除，或勾選整班／全選後一次刪除。</p>
         <div class="grid2">
           <div><label>年級</label><select id="r_grade"><option value="">全部</option><option>4年級</option><option>5年級</option><option>6年級</option></select></div>
           <div><label>班級（選填）</label><input id="r_cls" placeholder="6年1班"></div>
         </div>
-        <div style="margin-top:12px"><button class="btn" id="r_search" type="button">查詢</button></div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="r_search" type="button">查詢</button>
+          <button class="btn ghost" id="r_export" type="button" disabled>匯出 Excel（目前查詢結果＋統計）</button>
+        </div>
         <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+        <div id="r_stats"></div>
         <div id="r_toolbar" style="display:none;margin-bottom:10px">
           <div class="row" style="align-items:center;gap:14px">
-            <label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" id="r_selectAll">全選</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:600;white-space:nowrap"><input type="checkbox" id="r_selectAll" style="width:auto">全選</label>
             <div id="r_classQuick" style="display:flex;flex-wrap:wrap;gap:10px"></div>
             <button class="btn red" id="r_delSelected" type="button">刪除已選</button>
             <span class="muted">已選 <b id="r_selCount">0</b> 筆</span>
@@ -201,9 +205,9 @@
     </div>
   </main>
 
-  <script src="js/config.js?v=20261008b"></script>
-  <script src="js/api.js?v=20261008b"></script>
-  <script src="js/layout.js?v=20261008b"></script>
+  <script src="js/config.js?v=20261008c"></script>
+  <script src="js/api.js?v=20261008c"></script>
+  <script src="js/layout.js?v=20261008c"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [];
@@ -493,16 +497,106 @@
       const box = el("r_list");
       box.innerHTML = '<p class="muted">查詢中…</p>';
       el("r_toolbar").style.display = "none";
+      el("r_stats").innerHTML = ""; el("r_export").disabled = true;
+      if (el("r_cls").value.trim()) el("r_cls").value = normalizeClass(el("r_cls").value);
       try {
+        if (!EVENTS.length) await loadEvents();
         const d = await apiGet("reglist", { grade: el("r_grade").value, cls: el("r_cls").value.trim() });
         REG_LIST = d.regs.slice().sort((a, b) => classCompare(a["班級"], b["班級"]) || Number(a["座號"]) - Number(b["座號"]));
         renderRegList();
       } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
+
+    /* ---- 報名統計（純前端，依目前查詢結果 REG_LIST 計算） ---- */
+    function regStats() {
+      const evMap = {}; EVENTS.forEach((e, i) => { evMap[e["代碼"]] = Object.assign({ _i: i }, e); });
+      const ev = r => evMap[r["項目代碼"]] || { 代碼: r["項目代碼"], 名稱: r["項目名稱"], 類別: r["類別"], 組別: r["年級"], 性別: r["性別"], 每班名額: "", _i: 9999 };
+      const byGrade = {}, byEvent = {}, cell = {}, badCls = {};
+      REG_LIST.forEach(r => {
+        const g = String(r["年級"]), c = String(r["班級"]), e = ev(r);
+        const G = byGrade[g] || (byGrade[g] = { classes: new Set(), students: new Set(), rows: 0, indiv: 0 });
+        G.classes.add(c); G.students.add(g + "|" + c + "|" + r["座號"]); G.rows++;
+        if (e["類別"] === "個人單項") G.indiv++;
+        const E = byEvent[e["代碼"]] || (byEvent[e["代碼"]] = { ev: e, n: 0, classes: new Set() });
+        E.n++; E.classes.add(c);
+        const k = c + "|" + e["代碼"]; cell[k] = (cell[k] || 0) + 1;
+        if (!isStdClassName(c) || c.charAt(0) !== g.charAt(0)) (badCls[c] = badCls[c] || { n: 0, g, fix: normalizeClassName(c) }).n++;
+      });
+      const grades = Object.keys(byGrade).sort();
+      const events = Object.values(byEvent).sort((a, b) => a.ev._i - b.ev._i);
+      const over = [];
+      Object.keys(cell).forEach(k => {
+        const [c, code] = k.split("|"); const e = (byEvent[code] || {}).ev || {};
+        const cap = capOf(e);
+        if (cap && cell[k] > cap) over.push({ 班級: c, 項目: e["名稱"] + (e["性別"] && e["性別"] !== "混合" ? "(" + e["性別"] + ")" : ""), 人數: cell[k], 上限: cap });
+      });
+      over.sort((a, b) => classCompare(a.班級, b.班級));
+      return { byGrade, grades, events, cell, over, badCls };
+    }
+    function evLabel(e) { return e["名稱"] + (e["性別"] && e["性別"] !== "混合" ? "(" + e["性別"] + ")" : ""); }
+    // 每班名額只對個人單項有意義（以人計）；接力類的名額是「隊」，一隊有好幾位隊員＋候補，不能拿人數比
+    function capOf(e) { return e["類別"] === "個人單項" ? Number(e["每班名額"]) || 0 : 0; }
+    function renderRegStats() {
+      const box = el("r_stats");
+      el("r_export").disabled = !REG_LIST.length;
+      if (!REG_LIST.length) { box.innerHTML = ""; return; }
+      const S = regStats();
+      const gradeRows = S.grades.map(g => {
+        const G = S.byGrade[g], cls = Array.from(G.classes).sort(classCompare);
+        return `<tr><td>${esc(g)}</td><td style="text-align:center"><b>${cls.length}</b></td><td>${cls.map(esc).join("、")}</td><td style="text-align:center">${G.students.size}</td><td style="text-align:center">${G.rows}</td></tr>`;
+      }).join("");
+      const bad = Object.keys(S.badCls);
+      const warnBad = bad.length ? `<div class="api-warning">⚠ 班級寫法不標準或跟年級不符（會被當成不同班，影響統計與秩序冊）：${bad.map(c => `「${esc(c)}」${S.badCls[c].n} 筆` + (S.badCls[c].fix !== c && isStdClassName(S.badCls[c].fix) ? `→ 應為「${esc(S.badCls[c].fix)}」` : "")).join("、")}。請直接到試算表「報名」分頁修正班級欄，或刪除後重新報名。</div>` : "";
+      const warnOver = S.over.length ? `<div class="api-warning">⚠ 超過每班名額：${S.over.map(o => `${esc(o.班級)} ${esc(o.項目)} ${o.人數} 人（上限 ${o.上限}）`).join("；")}</div>` : "";
+      const evRows = S.events.map(E => `<tr><td>${esc(E.ev["組別"])}</td><td>${esc(evLabel(E.ev))}</td><td class="muted">${esc(E.ev["類別"])}</td><td style="text-align:center"><b>${E.n}</b></td><td style="text-align:center">${E.classes.size}</td></tr>`).join("");
+      // 各年級：班級 × 項目
+      const matrices = S.grades.map(g => {
+        const cls = Array.from(S.byGrade[g].classes).sort(classCompare);
+        const evs = S.events.filter(E => Array.from(E.classes).some(c => S.byGrade[g].classes.has(c)) && (String(E.ev["組別"]).indexOf(g) >= 0 || E.ev["組別"] === "全校"));
+        const head = `<tr><th>班級</th>${evs.map(E => `<th style="white-space:nowrap">${esc(evLabel(E.ev))}</th>`).join("")}<th>合計</th></tr>`;
+        const body = cls.map(c => {
+          let sum = 0;
+          const tds = evs.map(E => { const n = S.cell[c + "|" + E.ev["代碼"]] || 0; sum += n; const cap = capOf(E.ev);
+            return `<td style="text-align:center;${cap && n > cap ? "background:#fdecea;color:#c0392b;font-weight:700" : n ? "" : "color:#bbb"}">${n || "–"}</td>`; }).join("");
+          return `<tr><td style="white-space:nowrap">${esc(c)}</td>${tds}<td style="text-align:center"><b>${sum}</b></td></tr>`;
+        }).join("");
+        return `<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">${esc(g)} 各班 × 項目人數</summary><div class="table-wrap" style="margin-top:6px"><table>${head}${body}</table></div></details>`;
+      }).join("");
+      box.innerHTML = `<h3 style="color:var(--gold-d);margin:0 0 8px">報名統計 <span class="muted" style="font-size:13px;font-weight:400">（依目前查詢條件）</span></h3>
+        <div class="table-wrap"><table><thead><tr><th>年級</th><th>已報名班數</th><th>班級</th><th>學生人數</th><th>報名筆數</th></tr></thead><tbody>${gradeRows}</tbody></table></div>
+        ${warnBad}${warnOver}
+        <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">各項目報名人數（${S.events.length} 項）</summary>
+          <div class="table-wrap" style="margin-top:6px"><table><thead><tr><th>組別</th><th>項目</th><th>類別</th><th>報名人數</th><th>報名班數</th></tr></thead><tbody>${evRows}</tbody></table></div></details>
+        ${matrices}
+        <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">`;
+    }
+    function exportRegExcel() {
+      if (!REG_LIST.length) return toast("沒有資料可匯出", "err");
+      const S = regStats(), wb = XLSX.utils.book_new();
+      const t = d => { const x = new Date(d); return isNaN(x) ? String(d || "") : x.toLocaleString("zh-TW", { hour12: false }); };
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["年級", "班級", "座號", "姓名", "性別", "項目代碼", "項目名稱", "類別", "報名時間"]]
+        .concat(REG_LIST.map(r => [r["年級"], r["班級"], Number(r["座號"]) || r["座號"], r["姓名"], r["性別"], r["項目代碼"], r["項目名稱"], r["類別"], t(r["時間"])]))), "報名明細");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["年級", "已報名班數", "班級", "學生人數", "報名筆數", "個人單項筆數"]]
+        .concat(S.grades.map(g => { const G = S.byGrade[g]; const cls = Array.from(G.classes).sort(classCompare); return [g, cls.length, cls.join("、"), G.students.size, G.rows, G.indiv]; }))), "各年級統計");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["組別", "項目", "性別", "類別", "代碼", "報名人數", "報名班數", "每班名額"]]
+        .concat(S.events.map(E => [E.ev["組別"], E.ev["名稱"], E.ev["性別"], E.ev["類別"], E.ev["代碼"], E.n, E.classes.size, E.ev["每班名額"]]))), "各項目統計");
+      S.grades.forEach(g => {
+        const cls = Array.from(S.byGrade[g].classes).sort(classCompare);
+        const evs = S.events.filter(E => Array.from(E.classes).some(c => S.byGrade[g].classes.has(c)) && (String(E.ev["組別"]).indexOf(g) >= 0 || E.ev["組別"] === "全校"));
+        const aoa = [["班級"].concat(evs.map(E => evLabel(E.ev)), ["合計"])].concat(cls.map(c => {
+          const ns = evs.map(E => S.cell[c + "|" + E.ev["代碼"]] || 0); return [c].concat(ns, [ns.reduce((a, b) => a + b, 0)]); }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), (g + "各班").slice(0, 31));
+      });
+      if (S.over.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["班級", "項目", "人數", "每班上限"]].concat(S.over.map(o => [o.班級, o.項目, o.人數, o.上限]))), "超過名額");
+      const scope = (el("r_grade").value || "全部年級") + (el("r_cls").value.trim() ? "_" + el("r_cls").value.trim() : "");
+      XLSX.writeFile(wb, `報名統計_${scope}_${todayLocal().replace(/-/g, "")}.xlsx`);
+    }
+
     // 刪除後直接改 REG_LIST 重畫，不再重新查詢（每次打 API 都要等試算表，很慢）
     function renderRegList() {
       const box = el("r_list");
       el("r_toolbar").style.display = "none";
+      renderRegStats();
         if (!REG_LIST.length) { box.innerHTML = '<p class="muted">查無報名資料。</p>'; return; }
         box.innerHTML = `<div class="notice">共 ${REG_LIST.length} 筆。</div>
           <div class="table-wrap"><table><thead><tr><th></th><th>年級</th><th>班級</th><th>座號</th><th>姓名</th><th>項目</th><th>類別</th><th></th></tr></thead>
@@ -513,7 +607,7 @@
             <td><button class="btn red" style="padding:4px 10px" onclick="delReg(${i})">刪除</button></td>
           </tr>`).join("")}</tbody></table></div>`;
         const classes = Array.from(new Set(REG_LIST.map(r => r["班級"]))).sort(classCompare);
-        el("r_classQuick").innerHTML = classes.map(c => `<label style="display:flex;align-items:center;gap:4px"><input type="checkbox" class="r_chkClass" data-cls="${esc(c)}">${esc(c)}</label>`).join("");
+        el("r_classQuick").innerHTML = classes.map(c => `<label style="display:flex;align-items:center;gap:4px;white-space:nowrap;margin:0"><input type="checkbox" class="r_chkClass" data-cls="${esc(c)}" style="width:auto">${esc(c)}</label>`).join("");
         el("r_toolbar").style.display = "block";
         updateSelCount();
         box.querySelectorAll(".r_chk").forEach(chk => chk.addEventListener("change", updateSelCount));
@@ -618,13 +712,7 @@
     }
 
     // 班級輸入容錯：允許打「6年1班」或簡寫「601」（年級+2碼班級序號，比照往年紙本代碼）
-    function normalizeClass(s) {
-      s = String(s || "").trim();
-      if (!s) return "";
-      const m = s.match(/^([456])(\d{2})$/);
-      if (m) return m[1] + "年" + Number(m[2]) + "班";
-      return s;
-    }
+    function normalizeClass(s) { return normalizeClassName(s); }
 
     /* ---- 分道表格（可直接打字填班級/道次） ---- */
     function renderGrid() {
@@ -778,6 +866,7 @@
     el("u_save").addEventListener("click", saveUser);
     el("u_cancelEdit").addEventListener("click", cancelUserEdit);
     el("r_search").addEventListener("click", searchReg);
+    el("r_export").addEventListener("click", exportRegExcel);
     el("r_delSelected").addEventListener("click", delRegSelected);
     el("grade").addEventListener("change", onGradeChange);
     el("shuffleBtn").addEventListener("click", shuffleOrder);

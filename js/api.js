@@ -77,6 +77,29 @@ async function apiPost(action, body) {
 /* ---- 小工具 ---- */
 function el(id) { return document.getElementById(id); }
 
+// 班級統一成「6年10班」：老師會打 610、6年10班、六年十班、６年１０班……，存成不同字串會被當成不同班
+function normalizeClassName(s) {
+  s = String(s == null ? "" : s).replace(/\s/g, "").replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
+  if (!s) return "";
+  var m = s.match(/^([1-6])(\d{2})$/);
+  if (m) return m[1] + "年" + Number(m[2]) + "班";
+  m = s.match(/^([1-6一二三四五六])年級?([0-9一二三四五六七八九十]+)班?$/);
+  if (m) {
+    var g = zhNum(m[1]), c = zhNum(m[2]);
+    if (g && c) return g + "年" + c + "班";
+  }
+  return s;
+}
+function zhNum(t) {
+  if (/^\d+$/.test(t)) return Number(t);
+  var d = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  if (t === "十") return 10;
+  var m = t.match(/^([一二三四五六七八九])?十([一二三四五六七八九])?$/);
+  if (m) return (m[1] ? d[m[1]] : 1) * 10 + (m[2] ? d[m[2]] : 0);
+  return d[t] || 0;
+}
+function isStdClassName(s) { return /^[1-6]年\d{1,2}班$/.test(String(s)); }
+
 // 登入回應的 perms 由後端依「授權」分頁算好（admin 一律全部）；後端寫入 API 也會再檢查一次
 function hasPerm(auth, p) {
   return !!auth && (auth.role === "admin" || (auth.perms || []).indexOf(p) >= 0);

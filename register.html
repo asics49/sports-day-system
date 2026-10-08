@@ -6,7 +6,7 @@
   <title>線上報名 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261008b">
+  <link rel="stylesheet" href="css/style.css?v=20261008c">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
 </head>
@@ -72,9 +72,9 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261008b"></script>
-  <script src="js/api.js?v=20261008b"></script>
-  <script src="js/layout.js?v=20261008b"></script>
+  <script src="js/config.js?v=20261008c"></script>
+  <script src="js/api.js?v=20261008c"></script>
+  <script src="js/layout.js?v=20261008c"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [], ALLEVENTS = [], REG_ROWS = [], EVENT_OVER = [], LAST_SHEET_NAMES = [];
@@ -124,11 +124,7 @@
       return ALLEVENTS_P;
     }
     // 老師常把班別寫成 401；統一成「4年1班」，不然跟逐人報名、秩序冊、查詢的班級對不起來
-    function normalizeClass(s){
-      s=String(s||"").replace(/\s/g,"");
-      const m=s.match(/^([456])(\d{2})$/);
-      return m ? m[1]+"年"+Number(m[2])+"班" : s;
-    }
+    function normalizeClass(s){ return normalizeClassName(s); }
 
     // 若這個帳號設定了「限定年級」（例如各年級專用的報名帳號），鎖住年級選單，
     // 只能報該年級，避免登錯帳號、選錯年級誤報。
@@ -182,7 +178,14 @@
       el("warn").innerHTML=over?`<div class="error">⚠ 個人單項已選 ${n} 項，超過上限 ${CONFIG.maxIndividual} 項！請取消部分項目。</div>`:"";
       el("submitBtn").disabled=over; return n;
     }
+    // 班級要是「X年Y班」且年級跟選的一致，否則存進去會變成統計/秩序冊裡的「另一個班」
+    function checkClassInput(cls, grade){
+      if(!isStdClassName(cls)) return "班級格式請寫成「6年1班」或「601」（目前：「"+cls+"」）";
+      if(grade && cls.charAt(0)!==String(grade).charAt(0)) return "班級「"+cls+"」跟選的「"+grade+"」不一致";
+      return "";
+    }
     async function checkMine(){
+      el("cls").value=normalizeClass(el("cls").value);
       const grade=el("grade").value, cls=el("cls").value.trim(), seat=el("seat").value.trim(), box=el("mine");
       if(!grade||!cls||!seat) return toast("請先填年級、班級、座號","err");
       box.innerHTML='<p class="muted">查詢中…</p>';
@@ -191,9 +194,11 @@
       }catch(e){ box.innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
     }
     async function submitReg(){
-      const payload={token:AUTH.token,年級:el("grade").value,班級:el("cls").value.trim(),座號:el("seat").value.trim(),姓名:el("name").value.trim(),性別:el("sex").value,
+      const cls=normalizeClass(el("cls").value); el("cls").value=cls;
+      const payload={token:AUTH.token,年級:el("grade").value,班級:cls,座號:el("seat").value.trim(),姓名:el("name").value.trim(),性別:el("sex").value,
         codes:Array.from(document.querySelectorAll(".ev input:checked")).map(c=>c.value)};
       if(!payload.年級||!payload.班級||!payload.座號||!payload.姓名||!payload.性別) return toast("請完整填寫個人資料","err");
+      const clsErr=checkClassInput(payload.班級, payload.年級); if(clsErr) return toast(clsErr,"err");
       if(!payload.codes.length) return toast("請至少勾選一個項目","err");
       if(updateCounter()>CONFIG.maxIndividual) return toast("個人單項超過上限","err");
       const btn=el("submitBtn"); setBusy(btn,true,"送出中…");
@@ -272,7 +277,7 @@
           });
         });
       });
-      REG_ROWS=order.map(k=>{ const s=smap[k]; return Object.assign({},s,{over:s.indiv>CONFIG.maxIndividual}); });
+      REG_ROWS=order.map(k=>{ const s=smap[k]; return Object.assign({},s,{over:s.indiv>CONFIG.maxIndividual, bad:checkClassInput(s.班級,s.年級)}); });
       EVENT_OVER=Object.keys(evCount).filter(k=>evCount[k]>2).map(function(k){ const p=k.split("|"); const e=ALLEVENTS.find(x=>x["代碼"]===p[2])||{};
         return {班別:p[1],項目:(e["名稱"]||p[2])+"("+(e["性別"]||"")+")",人數:evCount[k]}; });
       renderRegPreview();
@@ -283,20 +288,20 @@
         const gradeHint = AUTH.grade ? `此帳號僅能匯入「${esc(AUTH.grade)}」，請確認檔案裡有名稱含「${esc(AUTH.grade.charAt(0))}」的工作表，` : "請確認工作表名含 4/5/6，";
         const found = LAST_SHEET_NAMES.length ? `<br>這個檔案裡的工作表：${LAST_SHEET_NAMES.map(esc).join("、")}` : "";
         box.innerHTML='<div class="error">讀不到有效資料。'+gradeHint+'且有「班別、座號、姓名」欄與「男生60公尺…」項目欄，項目欄打 V。'+found+'<br>建議按「下載範本」重新取得範本填寫。</div>'; return; }
-      const overN=REG_ROWS.filter(r=>r.over).length;
+      const overN=REG_ROWS.filter(r=>r.over).length, badN=REG_ROWS.filter(r=>r.bad).length;
       let warn=""; if(EVENT_OVER.length){ warn='<div class="api-warning">⚠ 下列項目同班報名超過 2 人（仍會匯入，請確認）：<br>'+EVENT_OVER.map(o=>esc(o.班別+" "+o.項目+"："+o.人數+" 人")).join("；")+'</div>'; }
-      const rows=REG_ROWS.map(function(r){ const cls=r.over?'style="background:#fdecea"':'';
-        const note=r.over?`<span class="rank1">⚠ 報 ${r.indiv} 項，超過上限，不匯入</span>`:"OK";
+      const rows=REG_ROWS.map(function(r){ const cls=(r.over||r.bad)?'style="background:#fdecea"':'';
+        const note=r.bad?`<span class="rank1">⚠ ${esc(r.bad)}，不匯入</span>`:r.over?`<span class="rank1">⚠ 報 ${r.indiv} 項，超過上限，不匯入</span>`:"OK";
         return `<tr ${cls}><td>${esc(r.班級)}</td><td>${esc(r.座號)}</td><td>${esc(r.姓名)}</td><td>${esc(r.evNames.join("、"))}</td><td style="text-align:center">${r.indiv}</td><td>${note}</td></tr>`;
       }).join("");
-      box.innerHTML=`<div class="notice">共 ${REG_ROWS.length} 位選手，其中 <b class="${overN?'rank1':''}">${overN}</b> 位超過每人 ${CONFIG.maxIndividual} 項（不匯入）。</div>${warn}
+      box.innerHTML=`<div class="notice">共 ${REG_ROWS.length} 位選手，其中 <b class="${overN?'rank1':''}">${overN}</b> 位超過每人 ${CONFIG.maxIndividual} 項（不匯入）${badN?`、<b class="rank1">${badN}</b> 位班級格式或年級不符（不匯入）`:""}。</div>${warn}
         <div class="table-wrap"><table><thead><tr><th>班別</th><th>座號</th><th>姓名</th><th>報名項目</th><th>項目數</th><th>狀態</th></tr></thead><tbody>${rows}</tbody></table></div>
         <div style="margin-top:12px"><button class="btn" id="r_import" type="button">確認匯入（略過超額者）</button></div>
         <div id="r_result" style="margin-top:12px"></div>`;
       el("r_import").addEventListener("click", doRegImport);
     }
     async function doRegImport(){
-      const students=REG_ROWS.filter(r=>!r.over&&r.codes.length).map(r=>({年級:r.年級,班級:r.班級,座號:r.座號,姓名:r.姓名,性別:r.性別,codes:r.codes}));
+      const students=REG_ROWS.filter(r=>!r.over&&!r.bad&&r.codes.length).map(r=>({年級:r.年級,班級:r.班級,座號:r.座號,姓名:r.姓名,性別:r.性別,codes:r.codes}));
       if(!students.length) return toast("沒有可匯入的資料","err");
       const requested=students.reduce((n,s)=>n+s.codes.length,0);
       const b=el("r_import"), out=el("r_result"); setBusy(b,true,"匯入中…");
