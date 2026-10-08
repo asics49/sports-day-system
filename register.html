@@ -280,18 +280,32 @@
       }).join("");
       box.innerHTML=`<div class="notice">共 ${REG_ROWS.length} 位選手，其中 <b class="${overN?'rank1':''}">${overN}</b> 位超過每人 ${CONFIG.maxIndividual} 項（不匯入）。</div>${warn}
         <div class="table-wrap"><table><thead><tr><th>班別</th><th>座號</th><th>姓名</th><th>報名項目</th><th>項目數</th><th>狀態</th></tr></thead><tbody>${rows}</tbody></table></div>
-        <div style="margin-top:12px"><button class="btn" id="r_import" type="button">確認匯入（略過超額者）</button></div>`;
+        <div style="margin-top:12px"><button class="btn" id="r_import" type="button">確認匯入（略過超額者）</button></div>
+        <div id="r_result" style="margin-top:12px"></div>`;
       el("r_import").addEventListener("click", doRegImport);
     }
     async function doRegImport(){
       const students=REG_ROWS.filter(r=>!r.over&&r.codes.length).map(r=>({年級:r.年級,班級:r.班級,座號:r.座號,姓名:r.姓名,性別:r.性別,codes:r.codes}));
       if(!students.length) return toast("沒有可匯入的資料","err");
-      const b=el("r_import"); setBusy(b,true,"匯入中…");
-      try{ const res=await apiPost("importReg",{token:AUTH.token,students});
-        toast("匯入完成：新增 "+res.addedTotal+" 筆報名，超額略過 "+res.overCount+" 位","ok");
-        el("r_preview").innerHTML+='<div class="notice">✅ 已匯入 '+res.addedTotal+' 筆。</div>';
-      }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
-      finally{ setBusy(b,false); }
+      const requested=students.reduce((n,s)=>n+s.codes.length,0);
+      const b=el("r_import"), out=el("r_result"); setBusy(b,true,"匯入中…");
+      out.innerHTML='<p class="muted">匯入中，請稍候，不要關閉頁面…</p>';
+      // 注意：不可對 r_preview 用 innerHTML +=，會把正在「匯入中…」的按鈕整顆換掉，狀態永遠卡住
+      try{
+        const res=await apiPost("importReg",{token:AUTH.token,students});
+        const already=Math.max(0, requested-res.addedTotal);
+        const msg=[`新增 <b>${res.addedTotal}</b> 筆報名`];
+        if(already) msg.push(`<b>${already}</b> 筆原本就已經報名過（不會重複新增）`);
+        if(res.overCount) msg.push(`<b>${res.overCount}</b> 位超過每人上限未匯入`);
+        out.innerHTML='<div class="notice">✅ 匯入完成：'+msg.join("；")+'。</div>';
+        toast("匯入完成","ok");
+        setBusy(b,false); b.disabled=true; b.textContent="已匯入完成";
+      }catch(e){
+        if(/登入/.test(e.message)){ clearAuth(); location.reload(); return; }
+        out.innerHTML='<div class="error">匯入時沒收到伺服器回應：'+esc(e.message)+
+          '<br>資料有可能其實已經寫入。可以直接再按一次「確認匯入」——已報名過的項目不會重複新增，結果會顯示有幾筆是原本就報過的。</div>';
+        setBusy(b,false);
+      }
     }
     async function downloadRegTemplate(){
       if(!ALLEVENTS.length){
