@@ -6,7 +6,7 @@
   <title>線上報名 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261008c">
+  <link rel="stylesheet" href="css/style.css?v=20261012a">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
 </head>
@@ -33,30 +33,38 @@
       </div>
     </section>
 
-    <!-- 逐人報名 -->
+    <!-- ① 選班級 → 看本班已報名名單 -->
     <section class="card reg-panel" style="display:none">
-      <h2>逐人報名</h2>
+      <h2>① 選擇班級，查看本班報名名單</h2>
       <div class="grid2">
         <div>
           <label>年級 *</label>
           <select id="grade"><option value="">請選擇</option><option>4年級</option><option>5年級</option><option>6年級</option></select>
         </div>
-        <div><label>班級 *（例：4年1班）</label><input id="cls" placeholder="4年1班"></div>
+        <div><label>班級 *（例：4年1班 或 401）</label>
+          <div class="row" style="flex-wrap:nowrap"><input id="cls" placeholder="4年1班"><button class="btn ghost" id="loadClassBtn" type="button" style="white-space:nowrap">查看本班</button></div></div>
+      </div>
+      <div id="classList" style="margin-top:12px"></div>
+    </section>
+
+    <!-- ② 新增 / 修改一位學生 -->
+    <section class="card reg-panel" id="formCard" style="display:none">
+      <h2 id="formTitle">② 新增學生報名</h2>
+      <div id="modeTip"></div>
+      <div class="grid2">
         <div><label>座號 *</label><input id="seat" inputmode="numeric" placeholder="15"></div>
         <div><label>姓名 *</label><input id="name" placeholder="王小明"></div>
         <div><label>性別 *</label><select id="sex"><option value="">請選擇</option><option>男</option><option>女</option></select></div>
-        <div style="align-self:end"><button class="btn ghost" id="checkBtn" type="button">查該生已報名項目</button></div>
       </div>
-      <div id="mine"></div>
-    </section>
-
-    <section class="card reg-panel" style="display:none">
-      <h2>選擇報名項目</h2>
-      <p class="muted">個人單項每人限報 <b id="maxTip">2</b> 項；大隊接力、趣味競賽不計入。
+      <p class="muted" style="margin-top:14px">個人單項每人限報 <b id="maxTip">2</b> 項；大隊接力、趣味競賽不計入。
         目前已選個人單項：<span id="counter" class="counter">0</span> 項。</p>
       <div id="events"><p class="muted">請先選擇「年級」與「性別」。</p></div>
       <div id="warn"></div>
-      <div style="margin-top:16px"><button class="btn" id="submitBtn" type="button">送出報名</button></div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn" id="submitBtn" type="button">送出報名</button>
+        <button class="btn ghost" id="cancelEditBtn" type="button" style="display:none">取消修改，改為新增</button>
+      </div>
+      <div id="done" style="margin-top:12px"></div>
     </section>
 
     <!-- Excel 批次匯入報名 -->
@@ -72,9 +80,9 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261008c"></script>
-  <script src="js/api.js?v=20261008c"></script>
-  <script src="js/layout.js?v=20261008c"></script>
+  <script src="js/config.js?v=20261012a"></script>
+  <script src="js/api.js?v=20261012a"></script>
+  <script src="js/layout.js?v=20261012a"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [], ALLEVENTS = [], REG_ROWS = [], EVENT_OVER = [], LAST_SHEET_NAMES = [];
@@ -140,18 +148,100 @@
       el("tplBtnGrades").textContent = "（" + AUTH.grade + "）";
     }
 
-    /* ---- 逐人報名 ---- */
-    async function loadEvents(){
+    /* ---- ① 本班報名名單 ---- */
+    let CLASS_REGS=[], CLASS_STUDENTS=[], CLASS_KEY="", EDIT=null;
+    function curClass(){ const c=normalizeClass(el("cls").value); el("cls").value=c; return c; }
+    async function loadClass(highlightSeat){
+      const grade=el("grade").value, cls=curClass(), box=el("classList");
+      if(!grade||!cls){ box.innerHTML=""; return; }
+      const err=checkClassInput(cls, grade); if(err){ box.innerHTML='<div class="error">'+esc(err)+'</div>'; return; }
+      box.innerHTML='<p class="muted">載入 '+esc(cls)+' 報名名單中…</p>';
+      try{
+        const [d]=await Promise.all([apiGet("reglist",{grade,cls}), ensureAllEvents()]);
+        if(el("grade").value!==grade||curClass()!==cls) return; // 載入期間老師已換班
+        CLASS_REGS=d.regs; CLASS_KEY=grade+"|"+cls;
+        renderClass(highlightSeat);
+      }catch(e){ box.innerHTML='<div class="error">名單載入失敗：'+esc(e.message)+'</div>'; }
+    }
+    function evName(code){ const e=ALLEVENTS.find(x=>x["代碼"]===code); return e? e["名稱"]+(e["性別"]&&e["性別"]!=="混合"?"("+e["性別"]+")":"") : code; }
+    function renderClass(highlightSeat){
+      const box=el("classList"), cls=el("cls").value, map={};
+      CLASS_REGS.forEach(function(r){ const s=normalizeSeat(r["座號"]);
+        const st=map[s]||(map[s]={seat:s,name:r["姓名"],sex:r["性別"],codes:[],dup:0});
+        if(st.codes.indexOf(r["項目代碼"])>=0) st.dup++; else st.codes.push(r["項目代碼"]); });
+      CLASS_STUDENTS=Object.values(map).sort((a,b)=>(Number(a.seat)||999)-(Number(b.seat)||999));
+      if(!CLASS_STUDENTS.length){ box.innerHTML='<div class="notice">'+esc(cls)+' 目前還沒有任何報名。請在下方「② 新增學生報名」逐一新增，或用 Excel 批次匯入。</div>'; return; }
+      const rows=CLASS_STUDENTS.map(function(s,i){
+        const hl=String(s.seat)===String(highlightSeat)?' style="background:#e8f6ec"':'';
+        const editing=EDIT&&String(EDIT.seat)===String(s.seat)?' style="background:#fff6dd"':hl;
+        return `<tr${editing}><td style="text-align:center">${esc(s.seat)}</td><td>${esc(s.name)}</td><td>${esc(s.sex)}</td>
+          <td>${esc(s.codes.map(evName).join("、"))}${s.dup?` <span class="rank1">（有 ${s.dup} 筆重複，按「修改」再儲存即可清除）</span>`:""}</td>
+          <td style="white-space:nowrap"><button class="btn ghost" type="button" onclick="editStudent(${i})">修改</button>
+          <button class="btn ghost" type="button" onclick="delStudent(${i})">刪除</button></td></tr>`;
+      }).join("");
+      // 個人單項每班名額
+      const cnt={}; CLASS_STUDENTS.forEach(s=>s.codes.forEach(c=>{cnt[c]=(cnt[c]||0)+1;}));
+      const quota=Object.keys(cnt).map(function(c){ const e=ALLEVENTS.find(x=>x["代碼"]===c)||{}; const cap=capOf(e);
+        return {c,n:cnt[c],cap}; }).filter(q=>q.cap).sort((a,b)=>a.c.localeCompare(b.c))
+        .map(q=>`<span style="margin-right:12px;${q.n>q.cap?"color:#c0392b;font-weight:700":""}">${esc(evName(q.c))} ${q.n}/${q.cap}${q.n>q.cap?" 超額":""}</span>`).join("");
+      box.innerHTML=`<div class="notice"><b>${esc(cls)}</b> 已報名 <b>${CLASS_STUDENTS.length}</b> 位學生、共 <b>${CLASS_STUDENTS.reduce((n,s)=>n+s.codes.length,0)}</b> 項。
+          要改某位學生的項目請按「修改」；要加新學生請直接在下方填寫。</div>
+        ${quota?`<div class="muted" style="font-size:13px;margin:6px 0">個人單項本班人數／每班名額：${quota}</div>`:""}
+        <div class="table-wrap"><table><thead><tr><th>座號</th><th>姓名</th><th>性別</th><th>已報名項目</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+    // 個人單項才有「每班 N 人」；接力的名額是「隊」
+    function capOf(e){ return String(e["類別"])==="個人單項" ? (Number(e["每班名額"])||0) : 0; }
+
+    function setMode(){
+      const s=EDIT;
+      el("formTitle").textContent = s ? "② 修改學生報名" : "② 新增學生報名";
+      el("modeTip").innerHTML = s ? `<div class="api-warning">正在修改：<b>${esc(el("cls").value)} ${esc(s.seat)} 號 ${esc(s.name)}</b>。勾選＝要報的項目、取消勾選＝不報，按「儲存修改」後以畫面上的勾選為準。</div>` : "";
+      el("submitBtn").textContent = s ? "儲存修改" : "送出報名";
+      el("cancelEditBtn").style.display = s ? "" : "none";
+    }
+    async function editStudent(i){
+      const s=CLASS_STUDENTS[i]; if(!s) return;
+      EDIT={seat:s.seat,name:s.name};
+      el("seat").value=s.seat; el("name").value=s.name; el("sex").value=s.sex||"";
+      el("done").innerHTML=""; el("warn").innerHTML="";
+      setMode(); renderClass();
+      el("formCard").scrollIntoView({behavior:"smooth",block:"start"});
+      await loadEvents(s.codes);
+    }
+    function newStudent(keepDone){
+      EDIT=null; el("seat").value=""; el("name").value=""; el("sex").value="";
+      if(!keepDone) el("done").innerHTML="";
+      el("warn").innerHTML=""; setMode(); if(CLASS_STUDENTS.length) renderClass(); loadEvents([]);
+    }
+    async function delStudent(i){
+      const s=CLASS_STUDENTS[i]; if(!s) return;
+      const cls=el("cls").value;
+      if(!confirm(`確定要刪除 ${cls} ${s.seat} 號 ${s.name} 的全部報名（${s.codes.map(evName).join("、")}）？`)) return;
+      try{
+        const res=await apiPost("updatestudent",{token:AUTH.token,年級:el("grade").value,班級:cls,座號:s.seat,codes:[]});
+        toast(res.msg,"ok");
+        if(EDIT&&String(EDIT.seat)===String(s.seat)) newStudent();
+        el("done").innerHTML='<div class="notice">🗑 已刪除 '+esc(cls+" "+s.seat+" 號 "+s.name)+' 的報名。</div>';
+      }catch(e){ if(/登入/.test(e.message)) return reLogin(); toast(e.message,"err"); }
+      loadClass();
+    }
+    function reLogin(){ alert("登入已過期，請重新登入。"); clearAuth(); location.reload(); }
+
+    /* ---- ② 新增 / 修改 ---- */
+    async function loadEvents(preCodes){
       const grade=el("grade").value, sex=el("sex").value, box=el("events");
+      // 換性別時保留已勾的（若新性別也有該項目）
+      const keep = Array.isArray(preCodes) ? preCodes : Array.from(document.querySelectorAll(".ev input:checked")).map(c=>c.value);
       if(!grade){ box.innerHTML='<p class="muted">請先選擇「年級」。</p>'; return; }
       box.innerHTML='<p class="muted">載入項目中…</p>';
       try{
         const data=await apiGet("events",{grade});
         EVENTS=data.events.filter(function(e){ if(!sex) return true; const g=String(e["性別"]); return g==="混合"||g===sex||g===""; });
-        renderEvents();
+        renderEvents(keep);
       }catch(e){ box.innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
     }
-    function renderEvents(){
+    function renderEvents(checked){
+      checked=checked||[];
       const box=el("events");
       if(!EVENTS.length){ box.innerHTML='<p class="muted">此條件下暫無可報名項目。</p>'; return; }
       const groups={"個人單項":[],"大隊接力":[],"趣味競賽":[]};
@@ -163,7 +253,8 @@
         html+=groups[cat].map(function(e){
           const counts=String(e["計入限報"])==="是";
           const badge=counts?'<span class="badge">計入</span>':'<span class="badge no">不計入</span>';
-          return `<label class="ev" data-count="${counts?1:0}"><input type="checkbox" value="${esc(e["代碼"])}">
+          const on=checked.indexOf(e["代碼"])>=0;
+          return `<label class="ev${on?" checked":""}" data-count="${counts?1:0}"><input type="checkbox" value="${esc(e["代碼"])}"${on?" checked":""}>
             <span><span class="name">${esc(e["名稱"])}</span>${badge}<br><span class="meta">${esc(e["組別"])} · ${esc(e["性別"])}</span></span></label>`;
         }).join("");
         html+=`</div>`;
@@ -184,37 +275,62 @@
       if(grade && cls.charAt(0)!==String(grade).charAt(0)) return "班級「"+cls+"」跟選的「"+grade+"」不一致";
       return "";
     }
-    async function checkMine(){
-      el("cls").value=normalizeClass(el("cls").value);
-      const grade=el("grade").value, cls=el("cls").value.trim(), seat=el("seat").value.trim(), box=el("mine");
-      if(!grade||!cls||!seat) return toast("請先填年級、班級、座號","err");
-      box.innerHTML='<p class="muted">查詢中…</p>';
-      try{ const d=await apiGet("student",{grade,cls,seat});
-        box.innerHTML=d.regs.length? '<div class="notice"><b>已報名：</b>'+d.regs.map(r=>esc(r["項目名稱"])+"（"+esc(r["類別"])+"）").join("、")+"</div>" : '<div class="notice">目前尚無報名紀錄。</div>';
-      }catch(e){ box.innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
-    }
+    // 錯誤顯示在按鈕旁邊（不只 toast），老師才看得到
+    function formErr(msg){ el("warn").innerHTML='<div class="error">'+esc(msg)+'</div>'; toast(msg,"err"); }
     async function submitReg(){
-      const cls=normalizeClass(el("cls").value); el("cls").value=cls;
-      const payload={token:AUTH.token,年級:el("grade").value,班級:cls,座號:el("seat").value.trim(),姓名:el("name").value.trim(),性別:el("sex").value,
+      const grade=el("grade").value, cls=curClass();
+      const payload={token:AUTH.token,年級:grade,班級:cls,座號:normalizeSeat(el("seat").value),姓名:el("name").value.trim(),性別:el("sex").value,
         codes:Array.from(document.querySelectorAll(".ev input:checked")).map(c=>c.value)};
-      if(!payload.年級||!payload.班級||!payload.座號||!payload.姓名||!payload.性別) return toast("請完整填寫個人資料","err");
-      const clsErr=checkClassInput(payload.班級, payload.年級); if(clsErr) return toast(clsErr,"err");
-      if(!payload.codes.length) return toast("請至少勾選一個項目","err");
-      if(updateCounter()>CONFIG.maxIndividual) return toast("個人單項超過上限","err");
-      const btn=el("submitBtn"); setBusy(btn,true,"送出中…");
-      try{ const res=await apiPost("register",payload); toast(res.msg,"ok");
-        el("warn").innerHTML='<div class="notice">✅ '+esc(res.msg)+'</div>';
-        document.querySelectorAll(".ev input:checked").forEach(c=>{c.checked=false;c.closest(".ev").classList.remove("checked");});
-        updateCounter(); checkMine();
+      el("seat").value=payload.座號; el("done").innerHTML="";
+      if(!grade||!cls) return formErr("請先在上方「① 選擇班級」填年級與班級");
+      const clsErr=checkClassInput(cls, grade); if(clsErr) return formErr(clsErr);
+      if(!/^\d{1,2}$/.test(payload.座號)) return formErr("座號請填數字");
+      if(!payload.姓名||!payload.性別) return formErr("請填寫姓名與性別");
+      if(!payload.codes.length) return formErr(EDIT?"沒有勾選任何項目。若要取消這位學生的全部報名，請按名單上的「刪除」":"請至少勾選一個項目");
+      if(updateCounter()>CONFIG.maxIndividual) return formErr("個人單項超過上限");
+      const btn=el("submitBtn"); setBusy(btn,true,EDIT?"儲存中…":"送出中…");
+      try{
+        // 先確認本班名單是最新的：新增時若這個座號已經有報名，改成修改模式，避免重複報名
+        if(CLASS_KEY!==grade+"|"+cls) await loadClass();
+        if(CLASS_KEY!==grade+"|"+cls) return formErr("本班名單載入失敗，請按上方「查看本班」重試");
+        if(!EDIT){
+          const i=CLASS_STUDENTS.findIndex(s=>String(s.seat)===payload.座號);
+          if(i>=0){
+            const s=CLASS_STUDENTS[i];
+            await editStudent(i);
+            el("warn").innerHTML='<div class="api-warning">'+esc(cls+" "+s.seat+" 號 "+s.name)+' 已經報名過（'+esc(s.codes.map(evName).join("、"))+'），已切換成「修改」。請重新勾選要報的項目後按「儲存修改」。</div>';
+            return;
+          }
+        }
+        // 每班名額（個人單項）
+        const others=CLASS_STUDENTS.filter(s=>!EDIT||String(s.seat)!==String(EDIT.seat));
+        const full=payload.codes.filter(function(c){ const e=ALLEVENTS.find(x=>x["代碼"]===c)||{}, cap=capOf(e);
+          return cap && others.filter(s=>s.codes.indexOf(c)>=0).length>=cap; });
+        if(full.length) return formErr(cls+" 的「"+full.map(evName).join("、")+"」已經報滿每班名額，請先修改或刪除同班其他學生的報名");
+
+        const res = EDIT ? await apiPost("updatestudent",Object.assign({origSeat:EDIT.seat},payload)) : await apiPost("register",payload);
+        const what=payload.codes.map(evName).join("、");
+        el("done").innerHTML=`<div class="notice" style="font-size:16px">✅ <b>${EDIT?"已修改完成":"已完成報名"}</b>：${esc(cls)} ${esc(payload.座號)} 號 ${esc(payload.姓名)} → ${esc(what)}
+          <br><span class="muted" style="font-size:13px">${esc(res.msg)} 上方本班名單已更新（綠色那列）。不用再按一次；要報下一位學生請直接填寫。</span></div>`;
+        toast(EDIT?"已修改完成":"報名完成","ok");
+        newStudent(true);
+        await loadClass(payload.座號);
       }catch(e){
+        if(/登入已過期/.test(e.message)) return reLogin();
         if(e instanceof ApiLostResponse){
-          // 報名可能其實已寫入：自動查一次該生報名紀錄給老師看，不要直接叫他重送
-          el("warn").innerHTML='<div class="error">'+esc(e.message)+'報名可能已經成功，下方是這位學生目前的報名紀錄，請確認後再決定是否重送。</div>';
-          checkMine();
-        } else { el("warn").innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
-        toast(e.message,"err");
+          formErr(e.message+" 報名可能已經成功，已重新載入上方本班名單，請先確認名單再決定是否重送（重送也不會重複新增）。");
+          loadClass(payload.座號);
+        } else formErr(e.message);
       }
-      finally{ setBusy(btn,false); }
+      finally{ setBusy(btn,false); setMode(); } // setBusy 會還原成送出前的按鈕文字，再依目前模式設一次
+    }
+    // 新增模式下填的座號已經有報名 → 直接切到修改，避免同一位學生被報兩次
+    function onSeatChange(){
+      if(EDIT||CLASS_KEY!==el("grade").value+"|"+curClass()) return;
+      const seat=normalizeSeat(el("seat").value), i=CLASS_STUDENTS.findIndex(s=>String(s.seat)===seat);
+      if(i<0) return;
+      const s=CLASS_STUDENTS[i];
+      editStudent(i).then(()=>{ el("warn").innerHTML='<div class="api-warning">'+esc(s.seat+" 號 "+s.name)+' 已經報名過，已切換成「修改」，畫面上已勾好他目前的項目。</div>'; });
     }
 
     /* ---- Excel 批次匯入報名 ---- */
@@ -261,7 +377,7 @@
         if(AUTH.grade && grade!==AUTH.grade) return; // 帳號限定年級時，忽略其他年級的工作表
         const cols=Object.keys(sh.rows[0]).map(h=>({h,ev:headerToEvent(h,grade)})).filter(c=>c.ev);
         sh.rows.forEach(function(r){
-          const 班別=normalizeClass(r["班別"]||r["班級"]), 座號=String(r["座號"]||"").trim(), 姓名=String(r["姓名"]||"").trim();
+          const 班別=normalizeClass(r["班別"]||r["班級"]), 座號=normalizeSeat(r["座號"]), 姓名=String(r["姓名"]||"").trim();
           if(!班別||!姓名) return;
           if(/範例|說明|請刪除/.test(班別)||/範例|請刪除/.test(姓名)) return;
           const joined=cols.filter(c=>String(r[c.h]||"").trim()!=="");
@@ -316,6 +432,7 @@
         out.innerHTML='<div class="notice">✅ 匯入完成：'+msg.join("；")+'。</div>';
         toast("匯入完成","ok");
         setBusy(b,false); b.disabled=true; b.textContent="已匯入完成";
+        if(CLASS_KEY) loadClass();
       }catch(e){
         if(/登入/.test(e.message)){ clearAuth(); location.reload(); return; }
         out.innerHTML='<div class="error">匯入時沒收到伺服器回應：'+esc(e.message)+
@@ -353,9 +470,13 @@
     el("loginBtn").addEventListener("click", login);
     el("pw").addEventListener("keydown", e=>{ if(e.key==="Enter") login(); });
     el("logoutBtn").addEventListener("click", ()=>{ clearAuth(); location.reload(); });
-    el("grade").addEventListener("change", loadEvents);
-    el("sex").addEventListener("change", loadEvents);
-    el("checkBtn").addEventListener("click", checkMine);
+    el("grade").addEventListener("change", ()=>{ newStudent(); loadClass(); });
+    el("sex").addEventListener("change", ()=>loadEvents());
+    el("cls").addEventListener("change", ()=>{ if(EDIT) newStudent(); loadClass(); });
+    el("cls").addEventListener("keydown", e=>{ if(e.key==="Enter") el("cls").blur(); });
+    el("loadClassBtn").addEventListener("click", ()=>loadClass());
+    el("seat").addEventListener("change", onSeatChange);
+    el("cancelEditBtn").addEventListener("click", ()=>newStudent());
     el("submitBtn").addEventListener("click", submitReg);
     el("r_file").addEventListener("change", onRegFile);
     el("r_tpl").addEventListener("click", downloadRegTemplate);

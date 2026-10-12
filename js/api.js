@@ -22,7 +22,8 @@ async function parseApiResponse(res) {
 }
 
 // 重送也不會造成重複或錯誤的動作，遇到結果遺失可以自動再送一次
-const RETRY_SAFE_POST = ["login", "googlelogin", "submitscore", "deletescore", "deleteregbatch", "importreg"];
+// register：後端會略過已報名的項目（2026-10-12 起座號也統一比對，不會再因「08」vs「8」重複）；updatestudent 是「設定成」，重送結果一樣
+const RETRY_SAFE_POST = ["login", "googlelogin", "submitscore", "deletescore", "deleteregbatch", "importreg", "register", "updatestudent"];
 
 async function withRetry(fn, times) {
   for (let i = 0; ; i++) {
@@ -97,6 +98,11 @@ function zhNum(t) {
   var m = t.match(/^([一二三四五六七八九])?十([一二三四五六七八九])?$/);
   if (m) return (m[1] ? d[m[1]] : 1) * 10 + (m[2] ? d[m[2]] : 0);
   return d[t] || 0;
+}
+// 座號統一成不含前導 0 的數字字串（「08」「８」→「8」），跟後端 normSeat 相同
+function normalizeSeat(s) {
+  s = String(s == null ? "" : s).replace(/\s/g, "").replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
+  return /^\d+$/.test(s) ? String(Number(s)) : s;
 }
 function isStdClassName(s) { return /^[1-6]年\d{1,2}班$/.test(String(s)); }
 
