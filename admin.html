@@ -63,7 +63,8 @@
     <!-- 發布公告 -->
     <div class="func-panel" id="annWrap" style="display:none">
       <section class="card">
-        <h2>發布公告</h2>
+        <h2 id="a_formTitle">發布公告</h2>
+        <div id="a_editTip"></div>
         <div class="grid2">
           <div><label>日期</label><input id="a_date" type="date"></div>
           <div><label>置頂</label><select id="a_pin"><option value="">否</option><option value="是">是（置頂）</option></select></div>
@@ -73,7 +74,9 @@
         <label>附件（選填，可多選；圖片/PDF/Word/Excel 等）</label>
         <input type="file" id="a_files" multiple>
         <div id="a_fileTip" class="muted" style="font-size:13px;margin-top:4px"></div>
-        <div style="margin-top:12px"><button class="btn" id="a_pub" type="button">發布公告</button></div>
+        <div id="a_oldFiles" style="margin-top:6px"></div>
+        <div class="row" style="margin-top:12px"><button class="btn" id="a_pub" type="button">發布公告</button>
+          <button class="btn ghost" id="a_cancelEdit" type="button" style="display:none">取消編輯</button></div>
         <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
         <h3 style="color:var(--gold-d)">目前公告</h3>
         <div id="a_list"><p class="muted">載入中…</p></div>
@@ -311,7 +314,10 @@
           const pin = String(a["置頂"])==="是" ? '<span class="pin">📌</span>' : "";
           return `<div class="ann" style="display:flex;justify-content:space-between;gap:10px;align-items:start">
             <div><div class="date">${fmtDate(a["日期"])} ${pin}</div><div class="title">${esc(a["標題"])}</div><div class="muted" style="white-space:pre-line">${linkify(a["內容"])}</div>${renderAttachLinks(a["附件"])}</div>
-            <button class="btn red" style="padding:5px 12px;flex:0 0 auto" onclick="delAnn(${i})">刪除</button>
+            <div class="row" style="flex:0 0 auto">
+              <button class="btn ghost" style="padding:5px 12px" onclick="editAnn(${i})">編輯</button>
+              <button class="btn red" style="padding:5px 12px" onclick="delAnn(${i})">刪除</button>
+            </div>
           </div>`;
         }).join("");
       }catch(e){ box.innerHTML='<div class="error">'+esc(e.message)+'</div>'; }
@@ -335,18 +341,48 @@
       el("a_fileTip").textContent="";
       return out;
     }
+    // 編輯中的公告（null＝新增模式）；後端用「原標題+原內容」找那一列
+    let EDIT_ANN = null;
+    window.editAnn = function(i){
+      const a = ANN_LIST[i]; if(!a) return;
+      EDIT_ANN = { 原標題:String(a["標題"]), 原內容:String(a["內容"]||""), files:parseAttachments(a["附件"]) };
+      el("a_date").value = toDateInput(a["日期"]); el("a_pin").value = String(a["置頂"])==="是" ? "是" : "";
+      el("a_title").value = a["標題"]; el("a_body").value = a["內容"]||""; el("a_files").value = "";
+      renderOldFiles(); setAnnMode();
+      el("annWrap").scrollIntoView({behavior:"smooth", block:"start"});
+    };
+    function renderOldFiles(){
+      const box=el("a_oldFiles");
+      if(!EDIT_ANN||!EDIT_ANN.files.length){ box.innerHTML=""; return; }
+      box.innerHTML='<div class="muted" style="font-size:13px">目前的附件（取消勾選＝移除；上面選的新檔案會再加上去）：</div>'+
+        EDIT_ANN.files.map((f,i)=>`<label style="display:flex;align-items:center;gap:6px;margin:2px 0"><input type="checkbox" class="a_keep" data-i="${i}" checked style="width:auto"><a href="${esc(f.url)}" target="_blank" rel="noopener">📎 ${esc(f.name)}</a></label>`).join("");
+    }
+    function setAnnMode(){
+      el("a_formTitle").textContent = EDIT_ANN ? "編輯公告" : "發布公告";
+      el("a_editTip").innerHTML = EDIT_ANN ? '<div class="api-warning">正在編輯：<b>'+esc(EDIT_ANN.原標題)+'</b>，改完按「更新公告」。</div>' : "";
+      el("a_pub").textContent = EDIT_ANN ? "更新公告" : "發布公告";
+      el("a_cancelEdit").style.display = EDIT_ANN ? "" : "none";
+    }
+    function cancelAnnEdit(){
+      EDIT_ANN=null; el("a_title").value=""; el("a_body").value=""; el("a_files").value=""; el("a_pin").value=""; el("a_date").value=todayLocal();
+      renderOldFiles(); setAnnMode();
+    }
     async function publishAnn(){
       const title=el("a_title").value.trim();
       if(!title) return toast("請填標題","err");
       const files=Array.from(el("a_files").files||[]);
-      const b=el("a_pub"); setBusy(b,true,"發布中…");
+      const editing=EDIT_ANN;
+      const b=el("a_pub"); setBusy(b,true,editing?"更新中…":"發布中…");
       try{
         let attach=[];
-        if(files.length) attach=await uploadAllFiles(files);
-        await apiPost("addAnnouncement",{token:AUTH.token, 日期:el("a_date").value, 標題:title, 內容:el("a_body").value.trim(), 置頂:el("a_pin").value, 附件: attach.length?JSON.stringify(attach):""});
-        toast("公告已發布","ok"); el("a_title").value=""; el("a_body").value=""; el("a_files").value=""; loadAnn();
+        if(editing) attach=Array.from(document.querySelectorAll(".a_keep:checked")).map(c=>editing.files[Number(c.dataset.i)]);
+        if(files.length) attach=attach.concat(await uploadAllFiles(files));
+        const body={token:AUTH.token, 日期:el("a_date").value, 標題:title, 內容:el("a_body").value.trim(), 置頂:el("a_pin").value, 附件: attach.length?JSON.stringify(attach):""};
+        if(editing){ await apiPost("updateAnnouncement",Object.assign({原標題:editing.原標題, 原內容:editing.原內容},body)); toast("公告已更新","ok"); }
+        else { await apiPost("addAnnouncement",body); toast("公告已發布","ok"); }
+        setBusy(b,false); cancelAnnEdit(); loadAnn();
       }catch (e) { handleWriteErr(e, loadAnn); }
-      finally{ setBusy(b,false); }
+      finally{ setBusy(b,false); setAnnMode(); }
     }
     window.delAnn = async function(i){
       const a = ANN_LIST[i]; if(!a) return;
@@ -604,7 +640,8 @@
             <td><input type="checkbox" class="r_chk" data-i="${i}" data-cls="${esc(r["班級"])}"></td>
             <td>${esc(r["年級"])}</td><td>${esc(r["班級"])}</td><td>${esc(r["座號"])}</td><td>${esc(r["姓名"])}</td>
             <td>${esc(r["項目名稱"])}</td><td class="muted">${esc(r["類別"])}</td>
-            <td><button class="btn red" style="padding:4px 10px" onclick="delReg(${i})">刪除</button></td>
+            <td style="white-space:nowrap"><a class="btn ghost" style="padding:4px 10px" target="_blank" title="在報名頁開啟這位學生的修改畫面" href="${esc(editRegUrl(r))}">修改</a>
+              <button class="btn red" style="padding:4px 10px" onclick="delReg(${i})">刪除</button></td>
           </tr>`).join("")}</tbody></table></div>`;
         const classes = Array.from(new Set(REG_LIST.map(r => r["班級"]))).sort(classCompare);
         el("r_classQuick").innerHTML = classes.map(c => `<label style="display:flex;align-items:center;gap:4px;white-space:nowrap;margin:0"><input type="checkbox" class="r_chkClass" data-cls="${esc(c)}" style="width:auto">${esc(c)}</label>`).join("");
@@ -624,6 +661,10 @@
             updateSelCount();
           });
         });
+    }
+    // 修改學生報名的介面在報名頁（本班名單→修改，走 updatestudent），這裡直接帶參數開過去
+    function editRegUrl(r) {
+      return "register.html?grade=" + encodeURIComponent(r["年級"]) + "&cls=" + encodeURIComponent(r["班級"]) + "&seat=" + encodeURIComponent(r["座號"]);
     }
     function updateSelCount() {
       const n = document.querySelectorAll(".r_chk:checked").length;
@@ -861,6 +902,7 @@
     el("pw").addEventListener("keydown", e=>{ if(e.key==="Enter") login(); });
     el("logoutBtn").addEventListener("click", ()=>{ clearAuth(); location.reload(); });
     el("a_pub").addEventListener("click", publishAnn);
+    el("a_cancelEdit").addEventListener("click", cancelAnnEdit);
     el("s_save").addEventListener("click", saveSchedule);
     el("s_cancelEdit").addEventListener("click", cancelEdit);
     el("u_save").addEventListener("click", saveUser);

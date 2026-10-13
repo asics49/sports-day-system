@@ -124,6 +124,16 @@
       el("who").textContent = AUTH.name + "（" + (AUTH.role==="admin"?"管理者":"老師") + "）";
       lockGradeToAccount();
       ensureAllEvents().catch(()=>{});
+      openFromUrl();
+    }
+    // 從管理頁「報名管理」按「修改」帶過來：register.html?grade=6年級&cls=6年1班&seat=8
+    async function openFromUrl(){
+      const q=new URLSearchParams(location.search), grade=q.get("grade"), cls=q.get("cls"), seat=q.get("seat");
+      if(!grade||!cls) return;
+      if(AUTH.grade && AUTH.grade!==grade){ toast("此帳號僅能報名「"+AUTH.grade+"」","err"); return; }
+      el("grade").value=grade; el("cls").value=cls;
+      await loadClass();
+      if(seat){ const i=CLASS_STUDENTS.findIndex(s=>String(s.seat)===normalizeSeat(seat)); if(i>=0) await editStudent(i); }
     }
 
     // Excel 範本/匯入都需要全部項目；API 冷啟動可能要等幾十秒，所以用同一個 Promise 等它，而不是叫老師「稍候再試」
