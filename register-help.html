@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>報名操作說明 · 右昌國小運動會</title>
+  <link rel="icon" href="assets/banner-small.jpg">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=20261012a">
+  <style>
+    .help h3 { margin: 18px 0 6px; color: var(--gold-d); }
+    .help ol, .help ul { padding-left: 1.4em; margin: 6px 0; }
+    .help li { margin: 4px 0; line-height: 1.7; }
+    .help .key { display:inline-block; border:1px solid #d9c9a6; background:#fffaf0; border-radius:6px; padding:0 7px; font-weight:700; white-space:nowrap; }
+    .help table td, .help table th { vertical-align: top; }
+    .toc a { margin-right: 14px; white-space: nowrap; }
+    @media print { .no-print { display:none !important; } .card { box-shadow:none; break-inside: avoid; } }
+  </style>
+</head>
+<body data-page="register">
+  <main class="help">
+    <section class="card">
+      <h2>線上報名操作說明（給各班老師）</h2>
+      <p class="muted">報名網頁：網站上方「線上報名」。電腦、手機都可以用；建議用電腦，畫面較寬。</p>
+      <div class="row no-print">
+        <a class="btn" href="register.html">← 回到報名頁</a>
+        <button class="btn ghost" type="button" onclick="window.print()">🖨 列印本說明</button>
+      </div>
+      <p class="toc no-print" style="margin-top:12px">
+        <a href="#s1">1. 登入</a><a href="#s2">2. 看本班名單</a><a href="#s3">3. 新增學生</a>
+        <a href="#s4">4. 修改／刪除</a><a href="#s5">5. Excel 匯入</a><a href="#s6">6. 報名規則</a><a href="#s7">7. 常見問題</a>
+      </p>
+    </section>
+
+    <section class="card" id="s1">
+      <h2>1. 登入</h2>
+      <ol>
+        <li>輸入體育組公布的<b>年級報名帳號與密碼</b>（例如四年級用 <span class="key">yocps04</span>），按 <span class="key">登入</span>。</li>
+        <li>登入後上方會顯示「此帳號僅能報名：○年級」，年級已自動選好，不用改。</li>
+        <li>使用完畢可按右上角 <span class="key">登出</span>。登入約 12 小時後會自動失效，到時重新登入即可。</li>
+      </ol>
+      <div class="api-warning">如果畫面跟本說明不一樣（例如沒有「① 選擇班級」），請按鍵盤 <span class="key">Ctrl</span> + <span class="key">F5</span> 重新整理，載入最新版網頁。</div>
+    </section>
+
+    <section class="card" id="s2">
+      <h2>2. 選擇班級，查看本班已報名名單</h2>
+      <ol>
+        <li>在「① 選擇班級」的<b>班級</b>欄輸入自己的班級，可寫 <span class="key">5年11班</span> 或簡寫 <span class="key">511</span>，按 <span class="key">查看本班</span>（或按 Enter）。</li>
+        <li>下方會列出本班<b>已報名的學生</b>：座號、姓名、性別、已報名項目。</li>
+        <li>名單上方的「個人單項本班人數／每班名額」可以看出每個項目還剩幾個名額，例如「60公尺(男) 2/2」代表已經報滿。</li>
+      </ol>
+      <p class="muted">每次報名、修改、刪除後，名單都會自動更新，<b>以這份名單為準</b>。</p>
+    </section>
+
+    <section class="card" id="s3">
+      <h2>3. 新增一位學生的報名</h2>
+      <ol>
+        <li>在「② 新增學生報名」填 <b>座號、姓名、性別</b>。</li>
+        <li>選好性別後會出現可報名的項目，<b>勾選</b>要報的項目。</li>
+        <li>按 <span class="key">送出報名</span>，稍等幾秒。</li>
+        <li>出現綠色大字「<b>✅ 已完成報名：班級 座號 姓名 → 項目</b>」就是成功了，名單裡這位學生會標成綠色。<br>
+          <b>看到這行字就不用再按一次</b>，直接填下一位學生。</li>
+      </ol>
+      <div class="notice">如果輸入的座號<b>已經報名過</b>，系統會自動切換成「修改」並勾好他目前的項目，避免同一位學生被報兩次。</div>
+    </section>
+
+    <section class="card" id="s4">
+      <h2>4. 修改或刪除已報名的學生</h2>
+      <h3>修改（換項目、改姓名或座號）</h3>
+      <ol>
+        <li>在本班名單找到該生，按 <span class="key">修改</span>。</li>
+        <li>下方表單會變成「② 修改學生報名」，並勾好他目前的項目。</li>
+        <li>調整勾選：<b>有勾＝要報，取消勾＝不報</b>。姓名、座號打錯也可以直接改。</li>
+        <li>按 <span class="key">儲存修改</span>，出現「✅ 已修改完成」即可。</li>
+        <li>改到一半不想改了，按 <span class="key">取消修改，改為新增</span>。</li>
+      </ol>
+      <h3>刪除（這位學生全部不報了）</h3>
+      <ol>
+        <li>在名單按該生的 <span class="key">刪除</span>，確認後即刪除他的全部報名。</li>
+        <li>只想取消其中一項，請用「修改」把那一項取消勾選，不要用刪除。</li>
+      </ol>
+    </section>
+
+    <section class="card" id="s5">
+      <h2>5. 用 Excel 一次匯入全班（選用）</h2>
+      <ol>
+        <li>按 <span class="key">下載範本</span>，取得 Excel 範本。</li>
+        <li>在年級工作表中，一位學生一列，填 <b>班別、座號、姓名</b>，在要報名的項目欄打 <span class="key">V</span>。範例列可以不刪。</li>
+        <li>存檔後按 <span class="key">選擇檔案</span> 選這個檔案，畫面會先列出預覽，紅色列表示有問題、不會匯入。</li>
+        <li>確認無誤按 <span class="key">確認匯入</span>，出現「✅ 匯入完成」即可，上方本班名單也會更新。</li>
+      </ol>
+      <p class="muted">已經報過的項目不會重複匯入，所以同一個檔案不小心匯入兩次也沒關係。匯入後要改個別學生，請用上面第 4 點的「修改」。</p>
+    </section>
+
+    <section class="card" id="s6">
+      <h2>6. 報名規則</h2>
+      <ul>
+        <li>每位學生的<b>個人單項最多報 2 項</b>（勾超過時按鈕會變灰、無法送出）。大隊接力、趣味競賽不算在內。</li>
+        <li>每個個人單項<b>每班最多 2 人</b>，報滿了系統會擋下並提示，請先修改同班其他學生。</li>
+        <li>班級請寫「5年11班」或「511」，系統會自動統一格式；班級的年級要跟帳號年級一致。</li>
+        <li>男生、女生的項目分開：請先選對性別，才會出現正確的項目。</li>
+      </ul>
+    </section>
+
+    <section class="card" id="s7">
+      <h2>7. 常見問題</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th style="width:34%">狀況</th><th>怎麼辦</th></tr></thead>
+        <tbody>
+          <tr><td>按了送出，不確定有沒有成功</td><td>看上方「本班名單」有沒有這位學生與項目；有就是成功了，<b>不要再按一次</b>。</td></tr>
+          <tr><td>出現「Google 伺服器這次沒有把結果傳回來」</td><td>這是 Google 偶發的暫時性問題，資料<b>可能已經寫入</b>。系統會自動重新載入本班名單，請先看名單確認；沒有寫入再按一次（重按也不會重複）。</td></tr>
+          <tr><td>畫面一直顯示「載入中…」</td><td>系統第一次開啟較慢，可能要等 10～30 秒；超過 1 分鐘請重新整理（Ctrl+F5）。</td></tr>
+          <tr><td>出現「登入已過期」</td><td>重新登入即可，已報名的資料不會消失。</td></tr>
+          <tr><td>出現「已經報滿每班名額」</td><td>本班這個項目已有 2 人報名，請先在名單把其中一人改掉，再報這位學生。</td></tr>
+          <tr><td>出現「此帳號僅能報名○年級」</td><td>登入的帳號年級不對，請按登出，改用自己年級的帳號。</td></tr>
+          <tr><td>名單上出現「有 N 筆重複」</td><td>按該生的「修改」，不用改任何東西，直接按「儲存修改」就會清掉重複。</td></tr>
+          <tr><td>其他問題</td><td>請洽體育組。</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+  </main>
+
+  <script src="js/config.js?v=20261012a"></script>
+  <script src="js/api.js?v=20261012a"></script>
+  <script src="js/layout.js?v=20261012a"></script>
+</body>
+</html>
