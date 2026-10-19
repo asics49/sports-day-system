@@ -6,7 +6,7 @@
   <title>管理 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261012a">
+  <link rel="stylesheet" href="css/style.css?v=20261019a">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
   <style>
@@ -54,6 +54,7 @@
         <option value="schedule">賽事行事曆管理</option>
         <option value="program">秩序冊產生</option>
         <option value="reg">報名管理</option>
+        <option value="unreg">未報名班級（催繳通知）</option>
         <option value="user">帳號管理</option>
       </select>
       <div id="noPermMsg" class="notice" style="display:none;margin-top:8px">此帳號沒有任何管理功能的權限。報名請到「<a href="register.html">線上報名</a>」、成績輸入請到「<a href="score.html">成績輸入</a>」；需要其他權限請洽管理者。</div>
@@ -177,6 +178,33 @@
       </section>
     </div>
 
+    <!-- 未報名班級：彙整後產生通知文字，可複製/分享到 LINE 群組/發布成網站公告 -->
+    <div class="func-panel" id="unregWrap" style="display:none">
+      <section class="card">
+        <h2>未報名班級彙整</h2>
+        <p class="muted">依目前報名資料，列出各年級<b>還沒有任何報名</b>的班級，並產生通知文字，可複製貼到 LINE 群組或發布成網站公告。</p>
+        <div class="grid2">
+          <div><label>各年級班級數（4／5／6 年級）</label>
+            <div class="row" style="flex-wrap:nowrap">
+              <input id="u_cc4" type="number" min="1" max="30" style="width:5em"><input id="u_cc5" type="number" min="1" max="30" style="width:5em"><input id="u_cc6" type="number" min="1" max="30" style="width:5em">
+            </div></div>
+          <div><label>報名截止時間（選填，會寫進通知）</label><input id="u_deadline" placeholder="例：10/24（五）17:00"></div>
+        </div>
+        <div style="margin-top:12px"><button class="btn" id="u_run" type="button">彙整未報名班級</button></div>
+        <div id="u_result" style="margin-top:12px"></div>
+        <div id="u_msgBox" style="display:none;margin-top:12px">
+          <label>通知文字（可直接修改）</label>
+          <textarea id="u_msg" rows="12"></textarea>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="u_copy" type="button">📋 複製文字</button>
+            <a class="btn ghost" id="u_line" target="_blank" rel="noopener">分享到 LINE</a>
+            <button class="btn ghost" id="u_pub" type="button">發布為網站公告</button>
+          </div>
+          <div id="u_pubTip" class="muted" style="font-size:13px;margin-top:6px"></div>
+        </div>
+      </section>
+    </div>
+
     <!-- 帳號管理 -->
     <div class="func-panel" id="userWrap" style="display:none">
       <section class="card">
@@ -208,9 +236,9 @@
     </div>
   </main>
 
-  <script src="js/config.js?v=20261012a"></script>
-  <script src="js/api.js?v=20261012a"></script>
-  <script src="js/layout.js?v=20261012a"></script>
+  <script src="js/config.js?v=20261019a"></script>
+  <script src="js/api.js?v=20261019a"></script>
+  <script src="js/layout.js?v=20261019a"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [];
@@ -269,7 +297,7 @@
       if (hasPerm(AUTH, "行事曆")) loadSchedule();
       if (AUTH.role === "admin") loadUsers();
     }
-    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理" };
+    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理", unreg: "報名管理" };
 
     // 新增/刪除類動作若結果在 Google 轉址那段遺失（ApiLostResponse），後端可能其實做完了：
     // 不自動重送（會重複新增），改成重新載入清單讓使用者看實際狀態。
@@ -697,6 +725,78 @@
       } finally { setBusy(btn, false); }
     }
 
+    /* ---- 未報名班級彙整 ---- */
+    const UNREG_GRADES = ["4年級", "5年級", "6年級"];
+    // 班級數：預設取 config.js，在頁面上改過就記在這台電腦（下次打開沿用）
+    function loadClassCounts() {
+      let saved = {}; try { saved = JSON.parse(localStorage.getItem("yc_classCount") || "{}"); } catch (e) {}
+      UNREG_GRADES.forEach(g => { el("u_cc" + g[0]).value = saved[g] || (CONFIG.classCount || {})[g] || ""; });
+    }
+    function saveClassCounts() {
+      const o = {}; UNREG_GRADES.forEach(g => { o[g] = Number(el("u_cc" + g[0]).value) || 0; });
+      try { localStorage.setItem("yc_classCount", JSON.stringify(o)); } catch (e) {}
+      return o;
+    }
+    function nowStamp() { const d = new Date(); return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+    async function runUnreg() {
+      const counts = saveClassCounts();
+      if (UNREG_GRADES.some(g => !counts[g])) return toast("請填各年級班級數", "err");
+      const b = el("u_run"); setBusy(b, true, "彙整中…");
+      el("u_result").innerHTML = '<p class="muted">讀取報名資料中…</p>';
+      try {
+        const d = await apiGet("reglist");
+        // 每班已報名學生數（班級+座號去重）
+        const stu = {};
+        d.regs.forEach(r => { const c = normalizeClass(r["班級"]); (stu[c] || (stu[c] = new Set())).add(normalizeSeat(r["座號"])); });
+        const res = UNREG_GRADES.map(g => {
+          const n = g[0], all = Array.from({ length: counts[g] }, (_, i) => n + "年" + (i + 1) + "班");
+          return { g, all, missing: all.filter(c => !stu[c]), done: all.filter(c => stu[c]).map(c => ({ c, n: stu[c].size })),
+                   extra: Object.keys(stu).filter(c => c.charAt(0) === n && all.indexOf(c) < 0) };
+        });
+        const total = res.reduce((s, x) => s + x.missing.length, 0);
+        el("u_result").innerHTML = `<div class="${total ? "api-warning" : "notice"}">${nowStamp()} 統計：共 <b>${total}</b> 個班級尚未報名。</div>
+          <div class="table-wrap"><table><thead><tr><th>年級</th><th>尚未報名</th><th>已報名（學生數）</th></tr></thead><tbody>${res.map(x => `<tr>
+            <td style="white-space:nowrap">${x.g}<br><span class="muted">${x.done.length}/${x.all.length} 班</span></td>
+            <td>${x.missing.length ? '<b class="rank1">' + x.missing.map(esc).join("、") + "</b>" : "✅ 全部已報名"}</td>
+            <td class="muted">${x.done.map(o => esc(o.c) + "(" + o.n + ")").join("、") || "—"}
+              ${x.extra.length ? '<br><span class="rank1">⚠ 名單外的班級：' + x.extra.map(esc).join("、") + "（班級數可能填太少，或班級寫錯）</span>" : ""}</td></tr>`).join("")}</tbody></table></div>`;
+        const site = location.href.replace(/admin\.html.*$/, "");
+        const lines = [`【${CONFIG.eventTitle}】報名進度提醒（${nowStamp()} 統計）`];
+        if (total) {
+          lines.push("以下班級尚未完成線上報名：");
+          res.forEach(x => lines.push("・" + x.g + "：" + (x.missing.length ? x.missing.join("、") : "全部已報名 ✅")));
+          if (el("u_deadline").value.trim()) lines.push("報名截止：" + el("u_deadline").value.trim());
+          lines.push("請導師盡快登入報名網站完成報名，謝謝！", "報名網站：" + site + "register.html", "操作說明：" + site + "register-help.html");
+        } else {
+          lines.push("各年級所有班級皆已完成報名，謝謝各位導師！");
+          lines.push("如需修改報名，請至報名網站本班名單按「修改」：" + site + "register.html");
+        }
+        el("u_msg").value = lines.join("\n");
+        el("u_msgBox").style.display = "block";
+        el("u_pub").style.display = hasPerm(AUTH, "公告") ? "" : "none";
+        el("u_pubTip").textContent = ""; updateLineLink();
+      } catch (e) { el("u_result").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+      finally { setBusy(b, false); }
+    }
+    function updateLineLink() { el("u_line").href = "https://line.me/R/share?text=" + encodeURIComponent(el("u_msg").value); }
+    async function copyUnregMsg() {
+      const t = el("u_msg").value;
+      try { await navigator.clipboard.writeText(t); toast("已複製，請到 LINE 群組貼上", "ok"); }
+      catch (e) { el("u_msg").select(); document.execCommand("copy"); toast("已複製（若沒有成功，請手動全選複製）", "ok"); }
+    }
+    async function publishUnreg() {
+      const body = el("u_msg").value.trim(); if (!body) return;
+      if (!confirm("確定把這段通知發布成網站首頁公告？")) return;
+      const lines = body.split("\n");
+      const b = el("u_pub"); setBusy(b, true, "發布中…");
+      try {
+        await apiPost("addAnnouncement", { token: AUTH.token, 日期: todayLocal(), 標題: lines[0].replace(/^【[^】]*】/, "") || "報名進度提醒", 內容: lines.slice(1).join("\n"), 置頂: "", 附件: "" });
+        el("u_pubTip").textContent = "✅ 已發布為網站公告（可到「發布公告」修改或刪除）。"; toast("已發布公告", "ok");
+        loadAnn();
+      } catch (e) { handleWriteErr(e, loadAnn); el("u_pubTip").textContent = "結果不確定，請到「發布公告」確認是否已出現，避免重複發布。"; }
+      finally { setBusy(b, false); }
+    }
+
     /* ---- 秩序冊產生 ---- */
     const USABLE_LANES = 4;
     const LANE_COLORS = ["藍", "綠", "黃", "紅", "橘", "白"];
@@ -903,6 +1003,11 @@
     el("logoutBtn").addEventListener("click", ()=>{ clearAuth(); location.reload(); });
     el("a_pub").addEventListener("click", publishAnn);
     el("a_cancelEdit").addEventListener("click", cancelAnnEdit);
+    el("u_run").addEventListener("click", runUnreg);
+    el("u_copy").addEventListener("click", copyUnregMsg);
+    el("u_msg").addEventListener("input", updateLineLink);
+    el("u_pub").addEventListener("click", publishUnreg);
+    loadClassCounts();
     el("s_save").addEventListener("click", saveSchedule);
     el("s_cancelEdit").addEventListener("click", cancelEdit);
     el("u_save").addEventListener("click", saveUser);
