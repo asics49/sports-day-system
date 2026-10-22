@@ -6,7 +6,7 @@
   <title>管理 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261022b">
+  <link rel="stylesheet" href="css/style.css?v=20261022c">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
   <style>
@@ -241,9 +241,9 @@
     </div>
   </main>
 
-  <script src="js/config.js?v=20261022b"></script>
-  <script src="js/api.js?v=20261022b"></script>
-  <script src="js/layout.js?v=20261022b"></script>
+  <script src="js/config.js?v=20261022c"></script>
+  <script src="js/api.js?v=20261022c"></script>
+  <script src="js/layout.js?v=20261022c"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [];
@@ -1037,14 +1037,7 @@
     async function loadSchedule4Book() {
       try { BOOK_SCHEDULE = (await apiGet("schedule")).schedule || []; } catch (e) { BOOK_SCHEDULE = []; }
     }
-    // 賽程的適用年級：「4-6年級」「5、6年級」「6年級」；年級欄空白時看項目名稱（如「6年級全員競賽」）；都沒寫＝全校
-    function scheduleGrades(r) {
-      const t = String(r["年級"] || "") || String(r["項目"] || "");
-      const m = t.match(/([1-6])\s*[-~～－至]\s*([1-6])\s*年級/);
-      if (m) { const a = []; for (let g = Number(m[1]); g <= Number(m[2]); g++) a.push(g); return a; }
-      const list = (t.match(/[1-6](?=[^年]*年級)|[1-6](?=年級)/g) || []).map(Number);
-      return list.length ? Array.from(new Set(list)) : null;   // null＝全校
-    }
+    // 賽程適用年級判斷 scheduleGrades() 在 js/api.js（賽事行事曆頁共用）
     function renderScheduleTable(grade) {
       const g = grade ? Number(grade.charAt(0)) : 0;
       const rows = BOOK_SCHEDULE.filter(r => { if (!g) return true; const gs = scheduleGrades(r); return !gs || gs.indexOf(g) >= 0; })

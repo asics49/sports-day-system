@@ -106,6 +106,15 @@ function normalizeSeat(s) {
 }
 // 不用報名的項目（大隊接力等，見 config.js noRegEvents）
 function isNoRegEvent(e) { return (CONFIG.noRegEvents || []).indexOf(String(e && e["名稱"])) >= 0; }
+// 賽程的適用年級（回傳 [4,5,6] 這種陣列；null＝全校）：「4-6年級」「5、6年級」「6年級」；
+// 年級欄空白時看項目名稱（如「6年級全員競賽」）。秩序冊與賽事行事曆頁共用。
+function scheduleGrades(r) {
+  var t = String(r["年級"] || "") || String(r["項目"] || "");
+  var m = t.match(/([1-6])\s*[-~～－至]\s*([1-6])\s*年級/);
+  if (m) { var a = []; for (var g = Number(m[1]); g <= Number(m[2]); g++) a.push(g); return a; }
+  var list = (t.match(/[1-6](?=[^年]*年級)|[1-6](?=年級)/g) || []).map(Number);
+  return list.length ? list.filter(function (x, i) { return list.indexOf(x) === i; }) : null;
+}
 function isStdClassName(s) { return /^[1-6]年\d{1,2}班$/.test(String(s)); }
 
 // 登入回應的 perms 由後端依「授權」分頁算好（admin 一律全部）；後端寫入 API 也會再檢查一次

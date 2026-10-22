@@ -6,69 +6,236 @@
   <title>賽事行事曆 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261022b">
+  <link rel="stylesheet" href="css/style.css?v=20261022c">
   <style>
-    .sched-day { display: flex; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
-    .sched-day:last-child { border-bottom: none; }
-    .sched-date { flex: 0 0 96px; text-align: center; }
-    .sched-date .d { font-size: 22px; font-weight: 800; color: var(--gold-d); line-height: 1.1; }
-    .sched-date .w { font-size: 13px; color: #888; }
-    .sched-items { flex: 1; min-width: 0; }
-    .sched-item { padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
-    .sched-item:last-child { margin-bottom: 0; }
-    .sched-item .name { font-weight: 700; }
-    .sched-item .meta { color: #777; font-size: 13px; margin-top: 2px; }
+    /* 項目類型配色 */
+    .t-run   { --tc: #e23b2e; --tb: #fdecea; }
+    .t-jump  { --tc: #4f8a1f; --tb: #eef5e4; }
+    .t-throw { --tc: #2f74c0; --tb: #e8f1fb; }
+    .t-relay { --tc: #c47f0e; --tb: #fdf3df; }
+    .t-team  { --tc: #8a4fc8; --tb: #f3ecfb; }
+    .t-other { --tc: #6f6760; --tb: #f2efea; }
+
+    /* 下一場 */
+    .next-card { position: relative; overflow: hidden; border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px;
+      color: #fff; background: linear-gradient(120deg, #d99a2b 0%, #e8792a 55%, #e23b2e 100%); box-shadow: var(--shadow); }
+    .next-card::after { content: "🏁"; position: absolute; right: -6px; bottom: -18px; font-size: 110px; opacity: .14; }
+    .next-card .lbl { font-size: 13px; letter-spacing: .1em; opacity: .9; }
+    .next-card .row1 { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+    .next-card .days { font-size: 46px; font-weight: 800; line-height: 1; }
+    .next-card .days small { font-size: 16px; font-weight: 700; margin-left: 4px; }
+    .next-card .nx-ev { font-size: 22px; font-weight: 800; }
+    .next-card .meta { margin-top: 8px; display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 14px; opacity: .95; }
+
+    /* 工具列 */
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 999px; padding: 5px 14px; font: inherit; font-size: 14px; cursor: pointer; }
+    .chip.on { background: var(--gold); border-color: var(--gold); color: #fff; font-weight: 700; }
+    .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .seg button { border: 0; background: #fff; padding: 6px 14px; font: inherit; font-size: 14px; cursor: pointer; color: var(--muted); }
+    .seg button.on { background: var(--ink); color: #fff; }
+    .legend { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: -4px 0 14px; }
+    .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--tc); margin-right: 5px; vertical-align: -1px; }
+
+    /* 時間軸 */
+    .month-h { font-size: 18px; font-weight: 800; color: var(--gold-d); margin: 18px 0 8px; display: flex; align-items: center; gap: 10px; }
+    .month-h::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+    .tl-day { display: grid; grid-template-columns: 74px 1fr; gap: 14px; position: relative; padding-bottom: 14px; scroll-margin-top: 80px; }
+    .tl-day::before { content: ""; position: absolute; left: 36px; top: 70px; bottom: 0; width: 2px; background: var(--line); }
+    .tl-day:last-child::before { display: none; }
+    .bubble { width: 74px; height: 70px; border-radius: 14px; background: #fff; border: 2px solid var(--gold); text-align: center; display: flex; flex-direction: column; justify-content: center; }
+    .bubble .md { font-size: 22px; font-weight: 800; color: var(--gold-d); line-height: 1.1; }
+    .bubble .wd { font-size: 12px; color: var(--muted); }
+    .bubble.wkend .wd { color: var(--red); }
+    .tl-day.today .bubble { background: var(--gold); border-color: var(--gold); }
+    .tl-day.today .bubble .md, .tl-day.today .bubble .wd { color: #fff; }
+    .tl-day.past { opacity: .5; }
+    .cards { display: grid; gap: 10px; min-width: 0; }
+    .ev-card { background: #fff; border: 1px solid var(--line); border-left: 6px solid var(--tc); border-radius: 12px; padding: 10px 14px; box-shadow: 0 2px 8px rgba(120,90,30,.06); }
+    .ev-card.next { box-shadow: 0 0 0 3px rgba(217,154,43,.35), 0 4px 14px rgba(120,90,30,.12); }
+    .ev-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 800; font-size: 17px; }
+    .ev-ico { width: 30px; height: 30px; border-radius: 9px; background: var(--tb); display: inline-flex; align-items: center; justify-content: center; font-size: 17px; flex: 0 0 auto; }
+    .gbadge { font-size: 12px; font-weight: 700; color: var(--tc); background: var(--tb); border-radius: 999px; padding: 1px 9px; }
+    .tag { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 1px 8px; }
+    .tag.next { background: var(--red); color: #fff; }
+    .tag.done { background: #eee; color: #888; }
+    .ev-meta { display: flex; gap: 4px 16px; flex-wrap: wrap; color: #5d564f; font-size: 14px; margin-top: 6px; }
+    .ev-note { margin-top: 6px; font-size: 13px; color: var(--muted); background: #faf7f1; border-radius: 8px; padding: 5px 10px; }
+
+    /* 月曆 */
+    .cal { margin-bottom: 22px; }
+    .cal-h { font-size: 18px; font-weight: 800; color: var(--gold-d); margin: 4px 0 8px; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--line); gap: 1px; }
+    .cal-wd { background: #faf5ec; text-align: center; font-size: 13px; font-weight: 700; padding: 6px 0; color: var(--muted); }
+    .cal-wd.we { color: var(--red); }
+    .cal-cell { background: #fff; min-height: 92px; padding: 4px 5px; min-width: 0; }
+    .cal-cell.out { background: #fbf9f5; }
+    .cal-cell.we { background: #fffaf7; }
+    .cal-cell .dn { display: inline-block; font-size: 13px; font-weight: 700; color: #9a928a; }
+    .cal-cell.today { box-shadow: inset 0 0 0 2px var(--gold); }
+    .cal-cell.today .dn { color: #fff; background: var(--gold); border-radius: 999px; padding: 0 6px; }
+    .cal-cell.past .ev-chip { opacity: .5; }
+    .ev-chip { display: block; width: 100%; text-align: left; border: 0; cursor: pointer; font: inherit; margin-top: 3px; padding: 2px 6px; border-radius: 6px;
+      background: var(--tb); color: var(--tc); font-size: 12px; font-weight: 700; line-height: 1.35; overflow: hidden;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all; }
+    .ev-chip:hover { filter: brightness(.96); }
+
+    @media (max-width: 640px) {
+      .next-card .days { font-size: 38px; }
+      .next-card .nx-ev { font-size: 19px; }
+      .tl-day { grid-template-columns: 58px 1fr; gap: 10px; }
+      .tl-day::before { left: 28px; top: 60px; }
+      .bubble { width: 58px; height: 60px; }
+      .bubble .md { font-size: 18px; }
+      .cal-cell { min-height: 64px; padding: 3px; }
+      .ev-chip { font-size: 0; padding: 2px 0; text-align: center; display: block; }   /* 手機上只顯示圖示 */
+      .ev-chip .ci { font-size: 13px; }
+    }
   </style>
 </head>
 <body data-page="schedule">
   <main>
+    <div id="nextBox"></div>
     <section class="card">
       <h2>賽事行事曆</h2>
-      <p class="muted">校慶運動會各項目的比賽日期、時間、地點與檢錄時間，依日期排列。</p>
+      <p class="muted">校慶運動會各項目的比賽日期、時間與地點。可以只看自己的年級，或切換月曆／時間軸。</p>
+      <div class="toolbar">
+        <div class="chips" id="gradeChips"></div>
+        <div class="seg"><button type="button" data-v="list">☰ 時間軸</button><button type="button" data-v="cal">📅 月曆</button></div>
+      </div>
+      <div class="legend" id="legend"></div>
       <div id="out"><p class="muted">載入中…</p></div>
     </section>
   </main>
 
-  <script src="js/config.js?v=20261022b"></script>
-  <script src="js/api.js?v=20261022b"></script>
-  <script src="js/layout.js?v=20261022b"></script>
+  <script src="js/config.js?v=20261022c"></script>
+  <script src="js/api.js?v=20261022c"></script>
+  <script src="js/layout.js?v=20261022c"></script>
   <script>
     const WD = ["日", "一", "二", "三", "四", "五", "六"];
-    function weekday(dateStr) {
-      const d = new Date(dateStr);
-      return isNaN(d) ? "" : WD[d.getDay()];
+    const TYPES = {
+      run: { ico: "🏃", name: "短跑" }, jump: { ico: "🤸", name: "跳躍" }, throw: { ico: "⚾", name: "擲遠" },
+      relay: { ico: "🏁", name: "接力" }, team: { ico: "🎉", name: "全員競賽" }, other: { ico: "📌", name: "其他" },
+    };
+    function typeOf(name) {
+      name = String(name || "");
+      if (/接力/.test(name)) return "relay";
+      if (/跳/.test(name)) return "jump";
+      if (/擲|壘球|鉛球/.test(name)) return "throw";
+      if (/全員|趣味|團體|拔河/.test(name)) return "team";
+      if (/\d+\s*(m|公尺)|賽跑|短跑/.test(name)) return "run";
+      return "other";
     }
-    function fmtMD(dateStr) {
-      const d = new Date(dateStr);
-      if (isNaN(d)) return esc(dateStr);
-      return (d.getMonth() + 1) + "/" + d.getDate();
-    }
+    function dayKey(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+    function startMin(t) { const m = String(t || "").match(/(\d{1,2})[:：](\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : 9999; }
+    function gradeLabel(r) { if (r["年級"]) return r["年級"]; const g = scheduleGrades(r); return g ? g.join("、") + "年級" : "全校"; }
+    function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+
+    let ALL = [], GRADE = store("yc_sched_grade") || "", VIEW = store("yc_sched_view") || (innerWidth < 640 ? "list" : "cal");
+    const TODAY = dayKey(new Date());
+
     async function run() {
-      const out = el("out"); out.innerHTML = '<p class="muted">載入中…</p>';
       try {
         const data = await apiGet("schedule");
-        if (!data.schedule.length) { out.innerHTML = '<div class="notice">尚未公布賽事行事曆。</div>'; return; }
-        const byDate = {};
-        data.schedule.forEach(function (r) { const d = r["日期"]; (byDate[d] || (byDate[d] = [])).push(r); });
-        const dates = Object.keys(byDate).sort();
-        out.innerHTML = dates.map(function (d) {
-          const items = byDate[d].map(function (r) {
-            const meta = [r["年級"], r["時間"], r["地點"]].filter(Boolean).join(" · ");
-            const chk = r["檢錄時間"] ? `檢錄：${esc(r["檢錄時間"])}` : "";   // 已 esc 過，下面不可再 esc 一次
-            const note = r["備註"] ? `<div class="meta">${esc(r["備註"])}</div>` : "";
-            return `<div class="sched-item">
-              <div class="name">${esc(r["項目"])}</div>
-              <div class="meta">${esc(meta)}${chk ? "　" + chk : ""}</div>
-              ${note}
-            </div>`;
-          }).join("");
-          return `<div class="sched-day">
-            <div class="sched-date"><div class="d">${fmtMD(d)}</div><div class="w">星期${weekday(d)}</div></div>
-            <div class="sched-items">${items}</div>
-          </div>`;
-        }).join("");
-      } catch (e) { out.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+        ALL = data.schedule.map(r => {
+          const d = new Date(r["日期"]);
+          return Object.assign({}, r, { _d: d, _k: isNaN(d) ? "" : dayKey(d), _t: typeOf(r["項目"]), _g: scheduleGrades(r) });
+        }).filter(r => r._k).sort((a, b) => a._k.localeCompare(b._k) || startMin(a["時間"]) - startMin(b["時間"]));
+        if (!ALL.length) { el("out").innerHTML = '<div class="notice">尚未公布賽事行事曆。</div>'; return; }
+        buildChips(); buildLegend(); render();
+      } catch (e) { el("out").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
+    function rows() { const g = Number(GRADE) || 0; return ALL.filter(r => !g || !r._g || r._g.indexOf(g) >= 0); }
+    // 下一場：今天或之後、最早的那一筆
+    function nextOf(list) { return list.find(r => r._k >= TODAY) || null; }
+
+    function buildChips() {
+      const gs = new Set(); ALL.forEach(r => (r._g || []).forEach(g => gs.add(g)));
+      const opts = [["", "全部"]].concat(Array.from(gs).sort().map(g => [String(g), g + " 年級"]));
+      if (!opts.some(o => o[0] === GRADE)) GRADE = "";
+      el("gradeChips").innerHTML = opts.map(o => `<button type="button" class="chip${o[0] === GRADE ? " on" : ""}" data-g="${o[0]}">${o[1]}</button>`).join("");
+      el("gradeChips").querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => {
+        GRADE = b.dataset.g; store("yc_sched_grade", GRADE);
+        el("gradeChips").querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b)); render();
+      }));
+    }
+    function buildLegend() {
+      const used = new Set(ALL.map(r => r._t));
+      el("legend").innerHTML = Object.keys(TYPES).filter(t => used.has(t)).map(t => `<span class="t-${t}">${TYPES[t].ico} ${TYPES[t].name}</span>`).join("");
+    }
+    document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => { VIEW = b.dataset.v; store("yc_sched_view", VIEW); render(); }));
+
+    function render() {
+      document.querySelectorAll(".seg button").forEach(b => b.classList.toggle("on", b.dataset.v === VIEW));
+      const list = rows(), nx = nextOf(list);
+      renderNext(nx, list);
+      if (!list.length) { el("out").innerHTML = '<div class="notice">這個年級目前沒有賽程。</div>'; return; }
+      el("out").innerHTML = VIEW === "cal" ? renderCal(list, nx) : renderList(list, nx);
+      el("out").querySelectorAll(".ev-chip").forEach(c => c.addEventListener("click", () => {
+        VIEW = "list"; store("yc_sched_view", VIEW); render();
+        const t = document.getElementById("d-" + c.dataset.k); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+      }));
+    }
+
+    function renderNext(nx, list) {
+      const box = el("nextBox");
+      if (!list.length) { box.innerHTML = ""; return; }
+      if (!nx) { box.innerHTML = `<div class="next-card"><div class="lbl">賽程進度</div><div class="row1"><div class="nx-ev">🎉 所有賽程都已結束，謝謝大家！</div></div></div>`; return; }
+      const days = Math.round((new Date(nx._k) - new Date(TODAY)) / 86400000);
+      const same = list.filter(r => r._k === nx._k);
+      const others = same.length > 1 ? `<span>同一天還有：${same.filter(r => r !== nx).map(r => esc(r["項目"])).join("、")}</span>` : "";
+      box.innerHTML = `<div class="next-card">
+        <div class="lbl">${GRADE ? GRADE + " 年級的" : ""}下一場比賽</div>
+        <div class="row1"><div class="days">${days === 0 ? "今天" : days}${days === 0 ? "" : "<small>天後</small>"}</div>
+          <div class="nx-ev">${TYPES[nx._t].ico} ${esc(nx["項目"])}</div></div>
+        <div class="meta"><span>📅 ${nx._d.getMonth() + 1}/${nx._d.getDate()}（${WD[nx._d.getDay()]}）</span>${nx["時間"] ? `<span>🕗 ${esc(nx["時間"])}</span>` : ""}
+          ${nx["地點"] ? `<span>📍 ${esc(nx["地點"])}</span>` : ""}<span>👥 ${esc(gradeLabel(nx))}</span>${others}</div></div>`;
+    }
+
+    function cardHtml(r, nx) {
+      const past = r._k < TODAY, isNext = r === nx;
+      return `<div class="ev-card t-${r._t}${isNext ? " next" : ""}">
+        <div class="ev-title"><span class="ev-ico">${TYPES[r._t].ico}</span><span>${esc(r["項目"])}</span>
+          <span class="gbadge">${esc(gradeLabel(r))}</span>${isNext ? '<span class="tag next">下一場</span>' : past ? '<span class="tag done">已結束</span>' : ""}</div>
+        <div class="ev-meta">${r["時間"] ? `<span>🕗 ${esc(r["時間"])}</span>` : ""}${r["地點"] ? `<span>📍 ${esc(r["地點"])}</span>` : ""}
+          ${r["檢錄時間"] ? `<span>📣 檢錄 ${esc(r["檢錄時間"])}</span>` : ""}</div>
+        ${r["備註"] ? `<div class="ev-note">💬 ${esc(r["備註"])}</div>` : ""}</div>`;
+    }
+    function renderList(list, nx) {
+      let html = "", month = -1;
+      const keys = Array.from(new Set(list.map(r => r._k)));
+      keys.forEach(k => {
+        const items = list.filter(r => r._k === k), d = items[0]._d;
+        if (d.getMonth() !== month) { month = d.getMonth(); html += `<div class="month-h">${d.getFullYear()} 年 ${month + 1} 月</div>`; }
+        const cls = (k === TODAY ? " today" : "") + (k < TODAY ? " past" : "");
+        html += `<div class="tl-day${cls}" id="d-${k}">
+          <div class="bubble${d.getDay() % 6 === 0 ? " wkend" : ""}"><div class="md">${d.getMonth() + 1}/${d.getDate()}</div><div class="wd">${k === TODAY ? "今天" : "星期" + WD[d.getDay()]}</div></div>
+          <div class="cards">${items.map(r => cardHtml(r, nx)).join("")}</div></div>`;
+      });
+      return html;
+    }
+    function renderCal(list, nx) {
+      const byDay = {}; list.forEach(r => (byDay[r._k] || (byDay[r._k] = [])).push(r));
+      const first = list[0]._d, last = list[list.length - 1]._d;
+      let html = "";
+      for (let y = first.getFullYear(), m = first.getMonth(); y < last.getFullYear() || (y === last.getFullYear() && m <= last.getMonth()); m === 11 ? (y++, m = 0) : m++) {
+        const start = new Date(y, m, 1), days = new Date(y, m + 1, 0).getDate(), lead = start.getDay();
+        let cells = WD.map((w, i) => `<div class="cal-wd${i % 6 === 0 ? " we" : ""}">${w}</div>`).join("");
+        const total = Math.ceil((lead + days) / 7) * 7;
+        for (let i = 0; i < total; i++) {
+          const dn = i - lead + 1;
+          if (dn < 1 || dn > days) { cells += `<div class="cal-cell out"></div>`; continue; }
+          const d = new Date(y, m, dn), k = dayKey(d), evs = byDay[k] || [];
+          const cls = (d.getDay() % 6 === 0 ? " we" : "") + (k === TODAY ? " today" : "") + (k < TODAY ? " past" : "");
+          cells += `<div class="cal-cell${cls}"><div class="dn">${dn}</div>${evs.map(r =>
+            `<button type="button" class="ev-chip t-${r._t}" data-k="${k}" title="${esc(r["項目"] + "｜" + (r["時間"] || "") + "｜" + gradeLabel(r))}"><span class="ci">${TYPES[r._t].ico}</span> ${esc(r["項目"])}</button>`).join("")}</div>`;
+        }
+        html += `<div class="cal"><div class="cal-h">${y} 年 ${m + 1} 月</div><div class="cal-grid">${cells}</div></div>`;
+      }
+      return html + '<p class="muted" style="font-size:13px">點月曆上的項目可看詳細時間、地點與備註。</p>';
+    }
+
     document.addEventListener("DOMContentLoaded", run);
     function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   </script>
