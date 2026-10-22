@@ -104,6 +104,8 @@ function normalizeSeat(s) {
   s = String(s == null ? "" : s).replace(/\s/g, "").replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
   return /^\d+$/.test(s) ? String(Number(s)) : s;
 }
+// 不用報名的項目（大隊接力等，見 config.js noRegEvents）
+function isNoRegEvent(e) { return (CONFIG.noRegEvents || []).indexOf(String(e && e["名稱"])) >= 0; }
 function isStdClassName(s) { return /^[1-6]年\d{1,2}班$/.test(String(s)); }
 
 // 登入回應的 perms 由後端依「授權」分頁算好（admin 一律全部）；後端寫入 API 也會再檢查一次
