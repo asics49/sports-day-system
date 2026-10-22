@@ -6,7 +6,7 @@
   <title>管理 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261019a">
+  <link rel="stylesheet" href="css/style.css?v=20261022a">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
   <style>
@@ -116,7 +116,7 @@
       <section class="card no-print">
         <h2>秩序冊產生</h2>
         <label>年級</label>
-        <select id="grade"><option value="">請選擇</option><option>4年級</option><option>5年級</option><option>6年級</option></select>
+        <select id="grade"><option value="">請選擇</option><option>1年級</option><option>2年級</option><option>3年級</option><option>4年級</option><option>5年級</option><option>6年級</option></select>
         <div id="loadArea" style="margin-top:10px"></div>
       </section>
 
@@ -129,6 +129,7 @@
           跳高/跳遠/壘球擲遠與接力類不受此表影響，一律依班級序排列。</p>
         <div class="row">
           <button class="btn ghost" id="shuffleBtn" type="button">隨機排序</button>
+          <button class="btn ghost" id="drawPresetBtn" type="button">套用抽籤結果</button>
           <button class="btn ghost" id="resetOrderBtn" type="button">依班級序重設</button>
           <button class="btn ghost" id="addBatchBtn" type="button">＋ 新增一組</button>
           <button class="btn ghost" id="removeBatchBtn" type="button">－ 移除最後一組</button>
@@ -236,9 +237,9 @@
     </div>
   </main>
 
-  <script src="js/config.js?v=20261019a"></script>
-  <script src="js/api.js?v=20261019a"></script>
-  <script src="js/layout.js?v=20261019a"></script>
+  <script src="js/config.js?v=20261022a"></script>
+  <script src="js/api.js?v=20261022a"></script>
+  <script src="js/layout.js?v=20261022a"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [];
@@ -805,7 +806,7 @@
     const RELAY = ["400公尺接力", "大隊接力", "體育班大隊接力"];
     let P_EVENTS = [], P_REGS = [], LANE_GRID = [];
     // 右昌操場跑道隆起，實際只用 2~5 道；長度一律跟著 USABLE_LANES，改 USABLE_LANES 就會自動補足欄位
-    const DEFAULT_LANE_NUMBERS = [2, 3, 4, 5];
+    const DEFAULT_LANE_NUMBERS = [1, 2, 3, 4];  // 115 道次表編號為 1～4 道（藍綠黃紅）
     let LANE_NUMBERS = Array.from({ length: USABLE_LANES }, function (_, i) {
       if (DEFAULT_LANE_NUMBERS[i] != null) return DEFAULT_LANE_NUMBERS[i];
       // 超出預設的部分接續往下編號，不要跟前面重複
@@ -818,6 +819,26 @@
     function gradeNum(c) { const m = String(c).match(/(\d+)年(\d+)班/); return m ? Number(m[1]) : 999; }
     // 先比年級再比班級，否則「全部年級」查詢時 4年1班/5年1班/6年1班 會交錯排在一起
     function classCompare(a, b) { return gradeNum(a) - gradeNum(b) || classNum(a) - classNum(b); }
+
+    // 115 學年度道次抽籤結果（體育組「115學年度運動會道次表.docx」，2026-10-22 輸入）
+    // 每列＝一組，依序為 1/2/3/4 道（藍/綠/黃/紅）；數字＝班級序號，0＝該道空著。1年級尚未抽籤。
+    const LANE_DRAWS = {
+      lanes: [1, 2, 3, 4], colors: ["藍色", "綠色", "黃色", "紅色"],
+      "2年級": [[8, 9, 6, 0], [7, 11, 1, 3], [10, 2, 4, 5]],
+      "3年級": [[5, 7, 8, 0], [4, 2, 11, 10], [9, 1, 3, 6]],
+      "4年級": [[0, 9, 7, 5], [1, 11, 8, 3], [6, 10, 4, 2]],
+      "5年級": [[5, 12, 11, 1], [9, 4, 3, 2], [7, 10, 6, 8]],
+      "6年級": [[8, 7, 3, 10], [4, 12, 2, 11], [6, 5, 1, 9]],
+    };
+    // 套用抽籤結果；回傳 false＝該年級還沒有抽籤結果
+    function applyLaneDraw(grade) {
+      const d = LANE_DRAWS[grade]; if (!d) return false;
+      const g = grade.charAt(0);
+      LANE_GRID = d.map(row => Array.from({ length: USABLE_LANES }, (_, i) => row[i] ? g + "年" + row[i] + "班" : ""));
+      LANE_NUMBERS = LANE_DRAWS.lanes.slice(0, USABLE_LANES);
+      LANE_COLOR_NAMES = LANE_DRAWS.colors.slice(0, USABLE_LANES);
+      return true;
+    }
 
     function buildGridFromClasses(classes) {
       const grid = [];
@@ -845,7 +866,15 @@
         const classes = Array.from(new Set(P_REGS.map(r => r["班級"]))).filter(Boolean);
         classes.sort(classCompare);
         if (!classes.length) { el("loadArea").innerHTML += '<div class="notice">此年級目前尚無報名資料。你可以先在下方表格自行輸入班級測試排版，或等報名資料進來後按「依班級序重設」自動帶入。</div>'; }
-        LANE_GRID = buildGridFromClasses(classes);
+        if (applyLaneDraw(grade)) {
+          el("loadArea").innerHTML += '<div class="notice">已帶入體育組的 <b>道次抽籤結果</b>（1～4 道：藍／綠／黃／紅）。表格仍可直接修改；改亂了按「套用抽籤結果」可還原。</div>';
+          const inGrid = new Set(LANE_GRID.flat().filter(Boolean));
+          const missing = classes.map(normalizeClass).filter(c => !inGrid.has(c));
+          if (missing.length) el("loadArea").innerHTML += '<div class="api-warning">⚠ 這些有報名的班級不在抽籤表裡：' + missing.map(esc).join("、") + '，產生秩序冊時不會排進短跑道次，請在表格補上。</div>';
+        } else {
+          el("loadArea").innerHTML += '<div class="notice">此年級尚未輸入抽籤結果，下方先依班級序排列，可直接修改。</div>';
+          LANE_GRID = buildGridFromClasses(classes);
+        }
         renderGrid();
         el("drawCard").style.display = "block";
         el("genCard").style.display = "block";
@@ -1017,6 +1046,10 @@
     el("r_delSelected").addEventListener("click", delRegSelected);
     el("grade").addEventListener("change", onGradeChange);
     el("shuffleBtn").addEventListener("click", shuffleOrder);
+    el("drawPresetBtn").addEventListener("click", function () {
+      if (applyLaneDraw(el("grade").value)) { renderGrid(); toast("已套用抽籤結果", "ok"); }
+      else toast("這個年級還沒有抽籤結果", "err");
+    });
     el("resetOrderBtn").addEventListener("click", resetGrid);
     el("addBatchBtn").addEventListener("click", addBatch);
     el("removeBatchBtn").addEventListener("click", removeBatch);
