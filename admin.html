@@ -149,6 +149,8 @@
           </div>
         </div>
         <p class="muted">請先確認上方抽籤順序再產生；順序若有更改，需重新按一次「產生」。</p>
+        <label style="display:flex;align-items:center;gap:6px;margin:6px 0 0"><input type="checkbox" id="incSchedule" checked style="width:auto">
+          秩序冊開頭加入「賽程時間表」（取自「賽事行事曆管理」；單一年級只列該年級的賽程，全年級列全部）</label>
       </section>
 
       <section id="bookletArea"></section>
@@ -875,7 +877,7 @@
       el("loadArea").innerHTML = '<p class="muted">載入中…</p>';
       if (grade === "ALL") return loadAllGrades();
       try {
-        const [evD, regD] = await Promise.all([apiGet("events", { grade }), apiGet("reglist", { grade })]);
+        const [evD, regD] = await Promise.all([apiGet("events", { grade }), apiGet("reglist", { grade }), loadSchedule4Book()]);
         P_EVENTS = evD.events; P_REGS = regD.regs;
         el("loadArea").innerHTML = `<div class="notice">共 ${P_EVENTS.length} 個項目，${P_REGS.length} 筆報名資料。</div>`;
         const classes = Array.from(new Set(P_REGS.map(r => r["班級"]))).filter(Boolean);
@@ -1030,6 +1032,40 @@
       return `<div class="prog-event"><h3>${esc(ev["名稱"])}（${esc(ev["組別"])} ${esc(ev["性別"])}）</h3>${blocks}</div>`;
     }
 
+    /* ---- 秩序冊：賽程時間表（資料＝賽程分頁，跟「賽事行事曆」同一份） ---- */
+    let BOOK_SCHEDULE = [];
+    async function loadSchedule4Book() {
+      try { BOOK_SCHEDULE = (await apiGet("schedule")).schedule || []; } catch (e) { BOOK_SCHEDULE = []; }
+    }
+    // 賽程的適用年級：「4-6年級」「5、6年級」「6年級」；年級欄空白時看項目名稱（如「6年級全員競賽」）；都沒寫＝全校
+    function scheduleGrades(r) {
+      const t = String(r["年級"] || "") || String(r["項目"] || "");
+      const m = t.match(/([1-6])\s*[-~～－至]\s*([1-6])\s*年級/);
+      if (m) { const a = []; for (let g = Number(m[1]); g <= Number(m[2]); g++) a.push(g); return a; }
+      const list = (t.match(/[1-6](?=[^年]*年級)|[1-6](?=年級)/g) || []).map(Number);
+      return list.length ? Array.from(new Set(list)) : null;   // null＝全校
+    }
+    function renderScheduleTable(grade) {
+      const g = grade ? Number(grade.charAt(0)) : 0;
+      const rows = BOOK_SCHEDULE.filter(r => { if (!g) return true; const gs = scheduleGrades(r); return !gs || gs.indexOf(g) >= 0; })
+        .map(r => Object.assign({ _d: new Date(r["日期"]) }, r))
+        .sort((a, b) => (a._d - b._d) || String(a["時間"]).localeCompare(String(b["時間"]), "zh-Hant", { numeric: true }));
+      if (!rows.length) return "";
+      const WD = ["日", "一", "二", "三", "四", "五", "六"];
+      const md = d => isNaN(d) ? "" : (d.getMonth() + 1) + "/" + d.getDate() + "（" + WD[d.getDay()] + "）";
+      const hasChk = rows.some(r => r["檢錄時間"]), hasNote = rows.some(r => r["備註"]);
+      let prev = "";
+      const trs = rows.map(r => {
+        const day = md(r._d), first = day !== prev; prev = day;
+        return `<tr${first ? ' style="border-top:2px solid var(--line)"' : ""}><td style="white-space:nowrap">${first ? esc(day) : ""}</td><td style="white-space:nowrap">${esc(r["時間"] || "")}</td>
+          <td>${esc(r["項目"] || "")}</td><td style="white-space:nowrap">${esc(r["年級"] || "")}</td><td>${esc(r["地點"] || "")}</td>
+          ${hasChk ? `<td>${esc(r["檢錄時間"] || "")}</td>` : ""}${hasNote ? `<td class="muted">${esc(r["備註"] || "")}</td>` : ""}</tr>`;
+      }).join("");
+      return `<div class="prog-event"><h3>賽程時間表${grade ? "（" + esc(grade) + "）" : ""}</h3>
+        <table class="prog-table"><thead><tr><th>日期</th><th>時間</th><th>比賽項目</th><th>年級</th><th>地點</th>${hasChk ? "<th>檢錄時間</th>" : ""}${hasNote ? "<th>備註</th>" : ""}</tr></thead>
+        <tbody>${trs}</tbody></table></div>`;
+    }
+
     // 依目前的 P_EVENTS / P_REGS / LANE_GRID 排出各項目
     function renderEvents() {
       let html = "", any = false;
@@ -1057,7 +1093,7 @@
     async function loadAllGrades() {
       el("drawCard").style.display = "none";
       try {
-        const [evD, regD] = await Promise.all([apiGet("events"), apiGet("reglist")]);
+        const [evD, regD] = await Promise.all([apiGet("events"), apiGet("reglist"), loadSchedule4Book()]);
         ALL_EVENTS = evD.events; ALL_REGS = regD.regs;
         const rows = gradesInBook().map(function (g) {
           const regs = ALL_REGS.filter(r => r["年級"] === g);
@@ -1072,6 +1108,7 @@
     function generateAllBooklet() {
       const keep = [P_EVENTS, P_REGS, LANE_GRID, LANE_NUMBERS, LANE_COLOR_NAMES];
       let html = `<div class="prog-cover"><h2>${esc(CONFIG.schoolName)} ${esc(CONFIG.eventTitle)}</h2><h3>秩序冊（全年級）</h3></div>`;
+      if (el("incSchedule").checked) html += renderScheduleTable("");
       let n = 0;
       try {
         gradesInBook().forEach(function (g) {
@@ -1080,7 +1117,7 @@
           const setup = laneSetupFor(g, P_REGS);
           LANE_GRID = setup.grid; LANE_NUMBERS = setup.numbers; LANE_COLOR_NAMES = setup.colors;
           const ev = renderEvents();
-          html += `<div class="prog-grade${n ? " prog-grade-break" : ""}"><h2 class="prog-grade-head">${esc(g)}</h2>` +
+          html += `<div class="prog-grade${n || el("incSchedule").checked ? " prog-grade-break" : ""}"><h2 class="prog-grade-head">${esc(g)}</h2>` +
             renderLaneAssignmentTable(g) + ev.html + `</div>`;
           n++;
         });
@@ -1094,6 +1131,7 @@
     function generateBooklet() {
       if (el("grade").value === "ALL") return generateAllBooklet();
       let html = `<div class="prog-cover"><h2>${esc(CONFIG.schoolName)} ${esc(CONFIG.eventTitle)}</h2><h3>${esc(el("grade").value)} 秩序冊</h3></div>`;
+      if (el("incSchedule").checked) html += renderScheduleTable(el("grade").value);
       html += renderLaneAssignmentTable();
       const ev = renderEvents();
       html += ev.html;
