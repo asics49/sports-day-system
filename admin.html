@@ -16,9 +16,11 @@
     .prog-event { margin-bottom: 10px; }
     .prog-event h3 { color: var(--gold-d); margin-bottom: 4px; }
     .prog-cover { text-align: center; margin-bottom: 24px; }
+    .prog-grade-head { text-align: center; border-bottom: 2px solid var(--gold); padding-bottom: 6px; margin: 28px 0 12px; }
     @media print {
       .site-header, .site-nav, .site-footer, .no-print, #loginCard { display: none !important; }
       .prog-table, .prog-event { break-inside: avoid; }
+      .prog-grade-break { break-before: page; }
       body { background: #fff; }
     }
   </style>
@@ -116,7 +118,7 @@
       <section class="card no-print">
         <h2>秩序冊產生</h2>
         <label>年級</label>
-        <select id="grade"><option value="">請選擇</option><option>1年級</option><option>2年級</option><option>3年級</option><option>4年級</option><option>5年級</option><option>6年級</option></select>
+        <select id="grade"><option value="">請選擇</option><option>1年級</option><option>2年級</option><option>3年級</option><option>4年級</option><option>5年級</option><option>6年級</option><option value="ALL">全年級（合併成一本）</option></select>
         <div id="loadArea" style="margin-top:10px"></div>
       </section>
 
@@ -832,12 +834,24 @@
     };
     // 套用抽籤結果；回傳 false＝該年級還沒有抽籤結果
     function applyLaneDraw(grade) {
-      const d = LANE_DRAWS[grade]; if (!d) return false;
-      const g = grade.charAt(0);
-      LANE_GRID = d.map(row => Array.from({ length: USABLE_LANES }, (_, i) => row[i] ? g + "年" + row[i] + "班" : ""));
-      LANE_NUMBERS = LANE_DRAWS.lanes.slice(0, USABLE_LANES);
-      LANE_COLOR_NAMES = LANE_DRAWS.colors.slice(0, USABLE_LANES);
+      const d = laneDrawFor(grade); if (!d) return false;
+      LANE_GRID = d.grid; LANE_NUMBERS = d.numbers; LANE_COLOR_NAMES = d.colors;
       return true;
+    }
+
+    const GRID_STORE = {};   // { "6年級": {grid, numbers, colors} }，renderGrid 時記下目前年級的表格
+    function laneDrawFor(grade) {
+      const d = LANE_DRAWS[grade]; if (!d) return null;
+      const g = grade.charAt(0);
+      return { grid: d.map(row => Array.from({ length: USABLE_LANES }, (_, i) => row[i] ? g + "年" + row[i] + "班" : "")),
+               numbers: LANE_DRAWS.lanes.slice(0, USABLE_LANES), colors: LANE_DRAWS.colors.slice(0, USABLE_LANES) };
+    }
+    // 全年級合併用：調整過的表格 > 抽籤結果 > 依報名班級序
+    function laneSetupFor(grade, regs) {
+      if (GRID_STORE[grade]) return Object.assign({ src: "你調整過的表格" }, GRID_STORE[grade]);
+      const d = laneDrawFor(grade); if (d) return Object.assign({ src: "抽籤結果" }, d);
+      const classes = Array.from(new Set(regs.map(r => normalizeClass(r["班級"])))).filter(Boolean).sort(classCompare);
+      return { src: "依班級序（尚未抽籤）", grid: buildGridFromClasses(classes), numbers: LANE_NUMBERS.slice(), colors: LANE_COLOR_NAMES.slice() };
     }
 
     function buildGridFromClasses(classes) {
@@ -859,6 +873,7 @@
       el("bookletArea").innerHTML = "";
       if (!grade) { el("loadArea").innerHTML = ""; return; }
       el("loadArea").innerHTML = '<p class="muted">載入中…</p>';
+      if (grade === "ALL") return loadAllGrades();
       try {
         const [evD, regD] = await Promise.all([apiGet("events", { grade }), apiGet("reglist", { grade })]);
         P_EVENTS = evD.events; P_REGS = regD.regs;
@@ -866,7 +881,10 @@
         const classes = Array.from(new Set(P_REGS.map(r => r["班級"]))).filter(Boolean);
         classes.sort(classCompare);
         if (!classes.length) { el("loadArea").innerHTML += '<div class="notice">此年級目前尚無報名資料。你可以先在下方表格自行輸入班級測試排版，或等報名資料進來後按「依班級序重設」自動帶入。</div>'; }
-        if (applyLaneDraw(grade)) {
+        if (GRID_STORE[grade]) {
+          LANE_GRID = GRID_STORE[grade].grid; LANE_NUMBERS = GRID_STORE[grade].numbers; LANE_COLOR_NAMES = GRID_STORE[grade].colors;
+          el("loadArea").innerHTML += '<div class="notice">沿用你剛才在這個年級調整過的分道表；要回到體育組抽籤結果請按「套用抽籤結果」。</div>';
+        } else if (applyLaneDraw(grade)) {
           el("loadArea").innerHTML += '<div class="notice">已帶入體育組的 <b>道次抽籤結果</b>（1～4 道：藍／綠／黃／紅）。表格仍可直接修改；改亂了按「套用抽籤結果」可還原。</div>';
           const inGrid = new Set(LANE_GRID.flat().filter(Boolean));
           const missing = classes.map(normalizeClass).filter(c => !inGrid.has(c));
@@ -886,6 +904,8 @@
 
     /* ---- 分道表格（可直接打字填班級/道次） ---- */
     function renderGrid() {
+      const cg = el("grade").value;
+      if (cg && cg !== "ALL") GRID_STORE[cg] = { grid: LANE_GRID, numbers: LANE_NUMBERS, colors: LANE_COLOR_NAMES };
       el("laneTip").textContent = USABLE_LANES;
       const box = el("orderList");
       let html = '<table class="prog-table"><thead><tr><th>道次<br>組別</th>' +
@@ -944,8 +964,8 @@
       renderGrid();
     }
 
-    function renderLaneAssignmentTable() {
-      const grade = el("grade").value;
+    function renderLaneAssignmentTable(grade) {
+      grade = grade || el("grade").value;
       let body = `<table class="prog-table"><thead><tr><th>道次<br>組別</th>` +
         LANE_NUMBERS.map(function (n, i) { return `<th>${esc(n)}<br><span class="muted" style="font-weight:400">${esc(LANE_COLOR_NAMES[i])}</span></th>`; }).join("") +
         `</tr></thead><tbody>`;
@@ -1010,10 +1030,9 @@
       return `<div class="prog-event"><h3>${esc(ev["名稱"])}（${esc(ev["組別"])} ${esc(ev["性別"])}）</h3>${blocks}</div>`;
     }
 
-    function generateBooklet() {
-      let html = `<div class="prog-cover"><h2>${esc(CONFIG.schoolName)} ${esc(CONFIG.eventTitle)}</h2><h3>${esc(el("grade").value)} 秩序冊</h3></div>`;
-      html += renderLaneAssignmentTable();
-      let any = false;
+    // 依目前的 P_EVENTS / P_REGS / LANE_GRID 排出各項目
+    function renderEvents() {
+      let html = "", any = false;
       P_EVENTS.forEach(function (ev) {
         const name = ev["名稱"]; let piece = "";
         if (SPRINT.indexOf(name) >= 0) piece = renderSprintEvent(ev);
@@ -1021,7 +1040,63 @@
         else if (RELAY.indexOf(name) >= 0) piece = renderRelayEvent(ev);
         if (piece) { html += piece; any = true; }
       });
-      if (!any) { toast("此年級尚無可產生的報名資料", "err"); return; }
+      return { html, any };
+    }
+
+    /* ---- 全年級合併成一本 ---- */
+    const ALL_GRADES = ["1年級", "2年級", "3年級", "4年級", "5年級", "6年級"];
+    let ALL_EVENTS = [], ALL_REGS = [];
+    function eventsOfGrade(grade) {
+      return ALL_EVENTS.filter(e => e["組別"] == grade || e["組別"] == "全校" || String(e["組別"]).indexOf(grade) >= 0);
+    }
+    // 有項目＋報名、或有抽籤結果的年級才放進來（1～3 年級目前只有道次分配表）
+    function gradesInBook() {
+      return ALL_GRADES.filter(g => LANE_DRAWS[g] || GRID_STORE[g] || ALL_REGS.some(r => r["年級"] === g));
+    }
+    async function loadAllGrades() {
+      el("drawCard").style.display = "none";
+      try {
+        const [evD, regD] = await Promise.all([apiGet("events"), apiGet("reglist")]);
+        ALL_EVENTS = evD.events; ALL_REGS = regD.regs;
+        const rows = gradesInBook().map(function (g) {
+          const regs = ALL_REGS.filter(r => r["年級"] === g);
+          return `<tr><td>${g}</td><td>${regs.length}</td><td>${esc(laneSetupFor(g, regs).src)}</td></tr>`;
+        }).join("");
+        el("loadArea").innerHTML = `<div class="notice">全年級合併成一本，每個年級從新的一頁開始：道次分配表 → 各項目。</div>
+          <div class="table-wrap"><table><thead><tr><th>年級</th><th>報名筆數</th><th>短跑分道依據</th></tr></thead><tbody>${rows}</tbody></table></div>
+          <p class="muted" style="font-size:13px">要調整某個年級的分道，先在上方選那個年級修改表格，再回來選「全年級」產生（同一次開啟頁面內會記住）。</p>`;
+        el("genCard").style.display = "block";
+      } catch (e) { el("loadArea").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+    function generateAllBooklet() {
+      const keep = [P_EVENTS, P_REGS, LANE_GRID, LANE_NUMBERS, LANE_COLOR_NAMES];
+      let html = `<div class="prog-cover"><h2>${esc(CONFIG.schoolName)} ${esc(CONFIG.eventTitle)}</h2><h3>秩序冊（全年級）</h3></div>`;
+      let n = 0;
+      try {
+        gradesInBook().forEach(function (g) {
+          P_REGS = ALL_REGS.filter(r => r["年級"] === g);
+          P_EVENTS = eventsOfGrade(g);
+          const setup = laneSetupFor(g, P_REGS);
+          LANE_GRID = setup.grid; LANE_NUMBERS = setup.numbers; LANE_COLOR_NAMES = setup.colors;
+          const ev = renderEvents();
+          html += `<div class="prog-grade${n ? " prog-grade-break" : ""}"><h2 class="prog-grade-head">${esc(g)}</h2>` +
+            renderLaneAssignmentTable(g) + ev.html + `</div>`;
+          n++;
+        });
+      } finally { [P_EVENTS, P_REGS, LANE_GRID, LANE_NUMBERS, LANE_COLOR_NAMES] = keep; }
+      if (!n) { toast("沒有可產生的年級", "err"); return; }
+      el("bookletArea").innerHTML = html;
+      el("printBtn").style.display = "inline-block";
+      toast("全年級秩序冊已產生（" + n + " 個年級）", "ok");
+    }
+
+    function generateBooklet() {
+      if (el("grade").value === "ALL") return generateAllBooklet();
+      let html = `<div class="prog-cover"><h2>${esc(CONFIG.schoolName)} ${esc(CONFIG.eventTitle)}</h2><h3>${esc(el("grade").value)} 秩序冊</h3></div>`;
+      html += renderLaneAssignmentTable();
+      const ev = renderEvents();
+      html += ev.html;
+      if (!ev.any) { toast("此年級尚無可產生的報名資料", "err"); return; }
       el("bookletArea").innerHTML = html;
       el("printBtn").style.display = "inline-block";
       toast("秩序冊已產生", "ok");
