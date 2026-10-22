@@ -166,3 +166,26 @@ tbody tr:hover { background: #fffdf7; }
   .nav-links.open { display: flex; }
   .nav-links a { border-bottom: 1px solid rgba(255,255,255,.25); }
 }
+
+/* ---- 賽程：項目類型配色、下一場比賽倒數卡（首頁／賽事行事曆／秩序冊共用，見 js/sched.js） ---- */
+/* 項目類型配色 */
+.t-run   { --tc: #e23b2e; --tb: #fdecea; }
+.t-jump  { --tc: #4f8a1f; --tb: #eef5e4; }
+.t-throw { --tc: #2f74c0; --tb: #e8f1fb; }
+.t-relay { --tc: #c47f0e; --tb: #fdf3df; }
+.t-team  { --tc: #8a4fc8; --tb: #f3ecfb; }
+.t-other { --tc: #6f6760; --tb: #f2efea; }
+
+/* 下一場 */
+.next-card { position: relative; overflow: hidden; border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px;
+  color: #fff; background: linear-gradient(120deg, #d99a2b 0%, #e8792a 55%, #e23b2e 100%); box-shadow: var(--shadow); }
+.next-card::after { content: "🏁"; position: absolute; right: -6px; bottom: -18px; font-size: 110px; opacity: .14; }
+.next-card .lbl { font-size: 13px; letter-spacing: .1em; opacity: .9; }
+.next-card .row1 { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.next-card .days { font-size: 46px; font-weight: 800; line-height: 1; }
+.next-card .days small { font-size: 16px; font-weight: 700; margin-left: 4px; }
+.next-card .nx-ev { font-size: 22px; font-weight: 800; }
+.next-card .meta { margin-top: 8px; display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 14px; opacity: .95; }
+.next-card .nx-link { position: relative; z-index: 1; display: inline-block; margin-top: 10px; color: #fff; font-weight: 700; font-size: 14px; text-decoration: none; background: rgba(255,255,255,.2); border-radius: 999px; padding: 3px 12px; }
+.next-card .nx-link:hover { background: rgba(255,255,255,.3); }
+@media (max-width: 640px) { .next-card .days { font-size: 38px; } .next-card .nx-ev { font-size: 19px; } }

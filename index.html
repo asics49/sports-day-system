@@ -7,10 +7,11 @@
   <link rel="icon" href="assets/banner-small.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261022c">
+  <link rel="stylesheet" href="css/style.css?v=20261022d">
 </head>
 <body data-page="home">
   <main>
+    <div id="nextBox"></div>
     <section class="tiles">
       <a class="tile" href="register.html"><div class="ico">📝</div><div class="t">線上報名</div><div class="d">個人單項 · 每人限 2 項</div></a>
       <a class="tile" href="board.html"><div class="ico">📣</div><div class="t">即時成績公布</div><div class="d">大螢幕 · 自動更新</div></a>
@@ -31,10 +32,15 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261022c"></script>
-  <script src="js/api.js?v=20261022c"></script>
-  <script src="js/layout.js?v=20261022c"></script>
+  <script src="js/config.js?v=20261022d"></script>
+  <script src="js/api.js?v=20261022d"></script>
+  <script src="js/layout.js?v=20261022d"></script>
+  <script src="js/sched.js?v=20261022d"></script>
   <script>
+    // 下一場比賽倒數（資料＝賽事行事曆）；讀不到就不顯示，不影響公告
+    (async function () {
+      try { el("nextBox").innerHTML = nextCardHtml(prepSchedule((await apiGet("schedule")).schedule), { link: "schedule.html" }); } catch (e) {}
+    })();
     (async function () {
       const box = el("ann");
       try {

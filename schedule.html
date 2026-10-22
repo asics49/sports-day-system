@@ -6,27 +6,8 @@
   <title>賽事行事曆 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261022c">
+  <link rel="stylesheet" href="css/style.css?v=20261022d">
   <style>
-    /* 項目類型配色 */
-    .t-run   { --tc: #e23b2e; --tb: #fdecea; }
-    .t-jump  { --tc: #4f8a1f; --tb: #eef5e4; }
-    .t-throw { --tc: #2f74c0; --tb: #e8f1fb; }
-    .t-relay { --tc: #c47f0e; --tb: #fdf3df; }
-    .t-team  { --tc: #8a4fc8; --tb: #f3ecfb; }
-    .t-other { --tc: #6f6760; --tb: #f2efea; }
-
-    /* 下一場 */
-    .next-card { position: relative; overflow: hidden; border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px;
-      color: #fff; background: linear-gradient(120deg, #d99a2b 0%, #e8792a 55%, #e23b2e 100%); box-shadow: var(--shadow); }
-    .next-card::after { content: "🏁"; position: absolute; right: -6px; bottom: -18px; font-size: 110px; opacity: .14; }
-    .next-card .lbl { font-size: 13px; letter-spacing: .1em; opacity: .9; }
-    .next-card .row1 { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
-    .next-card .days { font-size: 46px; font-weight: 800; line-height: 1; }
-    .next-card .days small { font-size: 16px; font-weight: 700; margin-left: 4px; }
-    .next-card .nx-ev { font-size: 22px; font-weight: 800; }
-    .next-card .meta { margin-top: 8px; display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 14px; opacity: .95; }
-
     /* 工具列 */
     .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
     .chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -82,8 +63,6 @@
     .ev-chip:hover { filter: brightness(.96); }
 
     @media (max-width: 640px) {
-      .next-card .days { font-size: 38px; }
-      .next-card .nx-ev { font-size: 19px; }
       .tl-day { grid-template-columns: 58px 1fr; gap: 10px; }
       .tl-day::before { left: 28px; top: 60px; }
       .bubble { width: 58px; height: 60px; }
@@ -109,46 +88,27 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261022c"></script>
-  <script src="js/api.js?v=20261022c"></script>
-  <script src="js/layout.js?v=20261022c"></script>
+  <script src="js/config.js?v=20261022d"></script>
+  <script src="js/api.js?v=20261022d"></script>
+  <script src="js/layout.js?v=20261022d"></script>
+  <script src="js/sched.js?v=20261022d"></script>
   <script>
-    const WD = ["日", "一", "二", "三", "四", "五", "六"];
-    const TYPES = {
-      run: { ico: "🏃", name: "短跑" }, jump: { ico: "🤸", name: "跳躍" }, throw: { ico: "⚾", name: "擲遠" },
-      relay: { ico: "🏁", name: "接力" }, team: { ico: "🎉", name: "全員競賽" }, other: { ico: "📌", name: "其他" },
-    };
-    function typeOf(name) {
-      name = String(name || "");
-      if (/接力/.test(name)) return "relay";
-      if (/跳/.test(name)) return "jump";
-      if (/擲|壘球|鉛球/.test(name)) return "throw";
-      if (/全員|趣味|團體|拔河/.test(name)) return "team";
-      if (/\d+\s*(m|公尺)|賽跑|短跑/.test(name)) return "run";
-      return "other";
-    }
-    function dayKey(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
-    function startMin(t) { const m = String(t || "").match(/(\d{1,2})[:：](\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : 9999; }
-    function gradeLabel(r) { if (r["年級"]) return r["年級"]; const g = scheduleGrades(r); return g ? g.join("、") + "年級" : "全校"; }
+    const WD = SCHED_WD, TYPES = SCHED_TYPES, gradeLabel = schedGradeLabel;
     function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
 
     let ALL = [], GRADE = store("yc_sched_grade") || "", VIEW = store("yc_sched_view") || (innerWidth < 640 ? "list" : "cal");
-    const TODAY = dayKey(new Date());
+    const TODAY = schedToday();
 
     async function run() {
       try {
         const data = await apiGet("schedule");
-        ALL = data.schedule.map(r => {
-          const d = new Date(r["日期"]);
-          return Object.assign({}, r, { _d: d, _k: isNaN(d) ? "" : dayKey(d), _t: typeOf(r["項目"]), _g: scheduleGrades(r) });
-        }).filter(r => r._k).sort((a, b) => a._k.localeCompare(b._k) || startMin(a["時間"]) - startMin(b["時間"]));
+        ALL = prepSchedule(data.schedule);
         if (!ALL.length) { el("out").innerHTML = '<div class="notice">尚未公布賽事行事曆。</div>'; return; }
         buildChips(); buildLegend(); render();
       } catch (e) { el("out").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
-    function rows() { const g = Number(GRADE) || 0; return ALL.filter(r => !g || !r._g || r._g.indexOf(g) >= 0); }
-    // 下一場：今天或之後、最早的那一筆
-    function nextOf(list) { return list.find(r => r._k >= TODAY) || null; }
+    function rows() { return schedForGrade(ALL, GRADE); }
+    const nextOf = schedNext;
 
     function buildChips() {
       const gs = new Set(); ALL.forEach(r => (r._g || []).forEach(g => gs.add(g)));
@@ -179,18 +139,7 @@
     }
 
     function renderNext(nx, list) {
-      const box = el("nextBox");
-      if (!list.length) { box.innerHTML = ""; return; }
-      if (!nx) { box.innerHTML = `<div class="next-card"><div class="lbl">賽程進度</div><div class="row1"><div class="nx-ev">🎉 所有賽程都已結束，謝謝大家！</div></div></div>`; return; }
-      const days = Math.round((new Date(nx._k) - new Date(TODAY)) / 86400000);
-      const same = list.filter(r => r._k === nx._k);
-      const others = same.length > 1 ? `<span>同一天還有：${same.filter(r => r !== nx).map(r => esc(r["項目"])).join("、")}</span>` : "";
-      box.innerHTML = `<div class="next-card">
-        <div class="lbl">${GRADE ? GRADE + " 年級的" : ""}下一場比賽</div>
-        <div class="row1"><div class="days">${days === 0 ? "今天" : days}${days === 0 ? "" : "<small>天後</small>"}</div>
-          <div class="nx-ev">${TYPES[nx._t].ico} ${esc(nx["項目"])}</div></div>
-        <div class="meta"><span>📅 ${nx._d.getMonth() + 1}/${nx._d.getDate()}（${WD[nx._d.getDay()]}）</span>${nx["時間"] ? `<span>🕗 ${esc(nx["時間"])}</span>` : ""}
-          ${nx["地點"] ? `<span>📍 ${esc(nx["地點"])}</span>` : ""}<span>👥 ${esc(gradeLabel(nx))}</span>${others}</div></div>`;
+      el("nextBox").innerHTML = nextCardHtml(list, { gradeText: GRADE ? GRADE + " 年級" : "" });
     }
 
     function cardHtml(r, nx) {
@@ -226,7 +175,7 @@
         for (let i = 0; i < total; i++) {
           const dn = i - lead + 1;
           if (dn < 1 || dn > days) { cells += `<div class="cal-cell out"></div>`; continue; }
-          const d = new Date(y, m, dn), k = dayKey(d), evs = byDay[k] || [];
+          const d = new Date(y, m, dn), k = schedDayKey(d), evs = byDay[k] || [];
           const cls = (d.getDay() % 6 === 0 ? " we" : "") + (k === TODAY ? " today" : "") + (k < TODAY ? " past" : "");
           cells += `<div class="cal-cell${cls}"><div class="dn">${dn}</div>${evs.map(r =>
             `<button type="button" class="ev-chip t-${r._t}" data-k="${k}" title="${esc(r["項目"] + "｜" + (r["時間"] || "") + "｜" + gradeLabel(r))}"><span class="ci">${TYPES[r._t].ico}</span> ${esc(r["項目"])}</button>`).join("")}</div>`;

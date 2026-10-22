@@ -6,7 +6,7 @@
   <title>管理 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261022c">
+  <link rel="stylesheet" href="css/style.css?v=20261022d">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
   <style>
@@ -16,6 +16,26 @@
     .prog-event { margin-bottom: 10px; }
     .prog-event h3 { color: var(--gold-d); margin-bottom: 4px; }
     .prog-cover { text-align: center; margin-bottom: 24px; }
+    /* 秩序冊：賽程時間表（日期卡片，兩欄） */
+    .bk-sched { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .bk-sum { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); margin: 2px 0 10px; }
+    .bk-legend span { margin-left: 10px; white-space: nowrap; }
+    .bk-legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--tc); margin-right: 4px; }
+    .bk-days { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .bk-day { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; break-inside: avoid; background: #fff; }
+    .bk-date { flex: 0 0 62px; background: linear-gradient(160deg, #e9a93a, #d9822b); color: #fff; text-align: center; display: flex; flex-direction: column; justify-content: center; padding: 6px 0; }
+    .bk-date .m { font-size: 11px; opacity: .9; }
+    .bk-date .d { font-size: 24px; font-weight: 800; line-height: 1.05; }
+    .bk-date .w { font-size: 11px; }
+    .bk-date.we { background: linear-gradient(160deg, #ec6a4d, #e23b2e); }
+    .bk-evs { flex: 1; min-width: 0; padding: 6px 8px; display: grid; gap: 5px; align-content: center; }
+    .bk-ev { display: flex; gap: 7px; align-items: flex-start; border-left: 4px solid var(--tc); padding-left: 7px; }
+    .bk-ev .ico { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 7px; background: var(--tb); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+    .bk-ev b { font-size: 14.5px; }
+    .bk-ev .gb { font-size: 11px; font-weight: 700; color: var(--tc); background: var(--tb); border-radius: 999px; padding: 0 7px; margin-left: 4px; white-space: nowrap; }
+    .bk-ev .mt { font-size: 12.5px; color: #5d564f; }
+    .bk-ev .nt { font-size: 11.5px; color: var(--muted); }
+    @media (max-width: 700px) { .bk-days { grid-template-columns: 1fr; } }
     .prog-grade-head { text-align: center; border-bottom: 2px solid var(--gold); padding-bottom: 6px; margin: 28px 0 12px; }
     @media print {
       .site-header, .site-nav, .site-footer, .no-print, #loginCard { display: none !important; }
@@ -241,9 +261,10 @@
     </div>
   </main>
 
-  <script src="js/config.js?v=20261022c"></script>
-  <script src="js/api.js?v=20261022c"></script>
-  <script src="js/layout.js?v=20261022c"></script>
+  <script src="js/config.js?v=20261022d"></script>
+  <script src="js/api.js?v=20261022d"></script>
+  <script src="js/layout.js?v=20261022d"></script>
+  <script src="js/sched.js?v=20261022d"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [];
@@ -1039,24 +1060,24 @@
     }
     // 賽程適用年級判斷 scheduleGrades() 在 js/api.js（賽事行事曆頁共用）
     function renderScheduleTable(grade) {
-      const g = grade ? Number(grade.charAt(0)) : 0;
-      const rows = BOOK_SCHEDULE.filter(r => { if (!g) return true; const gs = scheduleGrades(r); return !gs || gs.indexOf(g) >= 0; })
-        .map(r => Object.assign({ _d: new Date(r["日期"]) }, r))
-        .sort((a, b) => (a._d - b._d) || String(a["時間"]).localeCompare(String(b["時間"]), "zh-Hant", { numeric: true }));
+      const rows = schedForGrade(prepSchedule(BOOK_SCHEDULE), grade ? grade.charAt(0) : "");
       if (!rows.length) return "";
-      const WD = ["日", "一", "二", "三", "四", "五", "六"];
-      const md = d => isNaN(d) ? "" : (d.getMonth() + 1) + "/" + d.getDate() + "（" + WD[d.getDay()] + "）";
-      const hasChk = rows.some(r => r["檢錄時間"]), hasNote = rows.some(r => r["備註"]);
-      let prev = "";
-      const trs = rows.map(r => {
-        const day = md(r._d), first = day !== prev; prev = day;
-        return `<tr${first ? ' style="border-top:2px solid var(--line)"' : ""}><td style="white-space:nowrap">${first ? esc(day) : ""}</td><td style="white-space:nowrap">${esc(r["時間"] || "")}</td>
-          <td>${esc(r["項目"] || "")}</td><td style="white-space:nowrap">${esc(r["年級"] || "")}</td><td>${esc(r["地點"] || "")}</td>
-          ${hasChk ? `<td>${esc(r["檢錄時間"] || "")}</td>` : ""}${hasNote ? `<td class="muted">${esc(r["備註"] || "")}</td>` : ""}</tr>`;
+      const keys = Array.from(new Set(rows.map(r => r._k)));
+      const used = Array.from(new Set(rows.map(r => r._t)));
+      const f = rows[0]._d, l = rows[rows.length - 1]._d;
+      const span = schedMD(f) + "（" + SCHED_WD[f.getDay()] + "）～" + schedMD(l) + "（" + SCHED_WD[l.getDay()] + "）";
+      const days = keys.map(k => {
+        const evs = rows.filter(r => r._k === k), d = evs[0]._d;
+        return `<div class="bk-day"><div class="bk-date${d.getDay() % 6 === 0 ? " we" : ""}"><div class="m">${d.getMonth() + 1} 月</div><div class="d">${d.getDate()}</div><div class="w">星期${SCHED_WD[d.getDay()]}</div></div>
+          <div class="bk-evs">${evs.map(r => `<div class="bk-ev t-${r._t}"><span class="ico">${SCHED_TYPES[r._t].ico}</span><div>
+            <b>${esc(r["項目"])}</b><span class="gb">${esc(schedGradeLabel(r))}</span>
+            <div class="mt">${[r["時間"] ? "🕗 " + esc(r["時間"]) : "", r["地點"] ? "📍 " + esc(r["地點"]) : "", r["檢錄時間"] ? "📣 檢錄 " + esc(r["檢錄時間"]) : ""].filter(Boolean).join("　")}</div>
+            ${r["備註"] ? `<div class="nt">※ ${esc(r["備註"])}</div>` : ""}</div></div>`).join("")}</div></div>`;
       }).join("");
-      return `<div class="prog-event"><h3>賽程時間表${grade ? "（" + esc(grade) + "）" : ""}</h3>
-        <table class="prog-table"><thead><tr><th>日期</th><th>時間</th><th>比賽項目</th><th>年級</th><th>地點</th>${hasChk ? "<th>檢錄時間</th>" : ""}${hasNote ? "<th>備註</th>" : ""}</tr></thead>
-        <tbody>${trs}</tbody></table></div>`;
+      return `<div class="prog-event bk-sched"><h3>賽程時間表${grade ? "（" + esc(grade) + "）" : ""}</h3>
+        <div class="bk-sum"><span>共 <b>${rows.length}</b> 場比賽，${keys.length} 個比賽日｜${span}</span>
+          <span class="bk-legend">${used.map(t => `<span class="t-${t}">${SCHED_TYPES[t].name}</span>`).join("")}</span></div>
+        <div class="bk-days">${days}</div></div>`;
     }
 
     // 依目前的 P_EVENTS / P_REGS / LANE_GRID 排出各項目
