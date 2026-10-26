@@ -876,10 +876,10 @@
     }
     const recName = ev => REC_LABEL[ev["名稱"]] || ev["名稱"];
     const recTitleText = ev => recName(ev) + "（" + ev["組別"] + " " + ev["性別"] + "）";
-    function recHead(ev, n) {
+    function recHead(ev, n, label) {
       return `<div class="rec-head"><div class="rec-school">${esc(CONFIG.schoolName)} ${esc(CONFIG.eventTitle)}　成績紀錄表</div>
         <h2 class="rec-title">${esc(recTitleText(ev))}</h2>
-        <div class="rec-info"><span>項目代碼：${esc(ev["代碼"])}</span><span>報名人數：${n}</span>
+        <div class="rec-info"><span>項目代碼：${esc(ev["代碼"])}</span><span>${label || "報名人數"}：${n}</span>
           <span>日期：<i class="ln"></i></span><span>地點：<i class="ln"></i></span><span>記錄員：<i class="ln"></i></span><span>裁判長：<i class="ln"></i></span></div></div>`;
     }
     const recBlank = (cols, n) => Array.from({ length: n }, () => `<tr class="blank">${"<td></td>".repeat(cols)}</tr>`).join("");
@@ -919,12 +919,12 @@
       return `<section class="rec-sheet">${recHead(ev, regs.length)}${note ? `<div class="rec-note">${esc(note)}</div>` : ""}
         <table class="rec-table">${recTh(cols)}<tbody>${rows}${recBlank(cols.length, blank)}</tbody></table></section>`;
     }
-    // 接力：一班一列，列出隊員
+    // 團體項目（接力）：只列班級，不列名單
     function recRelay(ev, regs, blank) {
-      const g = groupByClass(regs);
-      const rows = Object.keys(g).sort(classCompare).map(c => `<tr class="relay-row"><td class="nm">${esc(c)}</td><td style="text-align:left">${g[c].map(st => esc(st["座號"] + " " + st["姓名"])).join("　")}</td><td></td><td></td><td></td></tr>`).join("");
-      const cols = [["班級", "13%"], ["隊員（座號 姓名）", ""], ["成績（秒）", "16%"], ["名次", "8%"], ["備註", "14%"]];
-      return `<section class="rec-sheet">${recHead(ev, regs.length)}
+      const classes = Object.keys(groupByClass(regs)).sort(classCompare);
+      const rows = classes.map(c => `<tr class="relay-row"><td class="nm">${esc(c)}</td><td></td><td></td><td></td></tr>`).join("");
+      const cols = [["班級", "22%"], ["成績（秒）", "28%"], ["名次", "14%"], ["備註", ""]];
+      return `<section class="rec-sheet">${recHead(ev, classes.length, "參賽班級數")}
         <table class="rec-table">${recTh(cols)}<tbody>${rows}${recBlank(cols.length, blank)}</tbody></table></section>`;
     }
 
@@ -932,21 +932,20 @@
     const REC_RELAY_BY_LANE = ["5年級"];
     function recRelayLane(ev, regs, setup, blank) {
       const byClass = groupByClass(regs), placed = new Set();
-      let heat = 0, body = "";
+      let heat = 0, body = "", total = 0;
       setup.grid.forEach(function (raw) {
         const rows = [];
         raw.map(normalizeClass).forEach((c, li) => { if (c) rows.push({ lane: setup.numbers[li], c }); });
         if (!rows.length) return;
         heat++;
         rows.forEach(function (r, k) {
-          placed.add(r.c);
-          const members = (byClass[r.c] || []).map(st => esc(st["座號"] + " " + st["姓名"])).join("　");
-          body += `<tr class="relay-row${k === 0 ? " heat-first" : ""}">${k === 0 ? `<td class="hn" rowspan="${rows.length}">第${cnNum(heat)}組</td>` : ""}<td>${esc(r.lane)}</td><td class="nm">${esc(r.c)}</td><td style="text-align:left;font-size:12px">${members}</td><td></td><td></td><td></td><td></td></tr>`;
+          placed.add(r.c); total++;
+          body += `<tr class="relay-row${k === 0 ? " heat-first" : ""}">${k === 0 ? `<td class="hn" rowspan="${rows.length}">第${cnNum(heat)}組</td>` : ""}<td>${esc(r.lane)}</td><td class="nm">${esc(r.c)}</td><td></td><td></td><td></td><td></td></tr>`;
         });
       });
-      const cols = [["組次", "8%"], ["道次", "7%"], ["班級", "12%"], ["隊員（座號 姓名）", ""], ["成績（秒）", "14%"], ["組內名次", "9%"], ["總名次", "9%"], ["備註", "12%"]];
+      const cols = [["組次", "10%"], ["道次", "9%"], ["班級", "17%"], ["成績（秒）", "20%"], ["組內名次", "12%"], ["總名次", "12%"], ["備註", ""]];
       const miss = Object.keys(byClass).filter(c => !placed.has(c)).length;
-      return { miss, html: `<section class="rec-sheet">${recHead(ev, regs.length)}<div class="rec-note">各班都要出賽，組次與道次依抽籤結果排列；沒有報名隊員名單的班級，請在現場補記。每組跑完先記組內名次與秒數，全部跑完再依秒數排出總名次。</div>
+      return { miss, html: `<section class="rec-sheet">${recHead(ev, total, "參賽班級數")}<div class="rec-note">各班都要出賽，組次與道次依抽籤結果排列。每組跑完先記組內名次與秒數，全部跑完再依秒數排出總名次。</div>
         <table class="rec-table">${recTh(cols)}<tbody>${body}${recBlank(cols.length, blank)}</tbody></table></section>` };
     }
 
