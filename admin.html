@@ -912,8 +912,8 @@
       const g = groupByClass(regs), list = Object.keys(g).sort(classCompare).flatMap(c => g[c]);
       const vj = ev["名稱"] === "跳高";
       const cols = vj
-        ? [["編號", "6%"], ["班級", "11%"], ["座號", "6%"], ["姓名", "12%"], ["站立摸高<br>（cm）", "10%"], ["第1次<br>摸高", "9%"], ["第2次<br>摸高", "9%"], ["第3次<br>摸高", "9%"], ["最佳<br>摸高", "9%"], ["垂直跳成績<br>（最佳－站立）", "12%"], ["名次", "6%"], ["備註", ""]]
-        : [["編號", "7%"], ["班級", "12%"], ["座號", "7%"], ["姓名", "14%"], ["第1次", "11%"], ["第2次", "11%"], ["第3次", "11%"], ["最佳成績<br>（公尺）", "11%"], ["名次", "7%"], ["備註", ""]];
+        ? [["編號", "5%"], ["班級", "9%"], ["座號", "5%"], ["姓名", "10%"], ["站立摸高<br>（cm）", "9%"], ["第1次<br>摸高", "8%"], ["第2次<br>摸高", "8%"], ["第3次<br>摸高", "8%"], ["最佳<br>摸高", "8%"], ["垂直跳成績<br>（最佳－站立）", "11%"], ["名次", "6%"], ["備註", ""]]
+        : [["編號", "6%"], ["班級", "11%"], ["座號", "6%"], ["姓名", "13%"], ["第1次", "10%"], ["第2次", "10%"], ["第3次", "10%"], ["最佳成績<br>（公尺）", "10%"], ["名次", "7%"], ["備註", ""]];
       const rows = list.map((st, i) => `<tr><td>${i + 1}</td><td>${esc(st["班級"])}</td><td>${esc(st["座號"])}</td><td class="nm">${esc(st["姓名"])}</td>${"<td></td>".repeat(cols.length - 4)}</tr>`).join("");
       const note = vj ? el("rec_vjnote").value.trim() : "每人試 3 次，取最佳成績（公尺，記到公分）；犯規請在格內註記 ×。成績相同者並列。";
       return `<section class="rec-sheet">${recHead(ev, regs.length)}${note ? `<div class="rec-note">${esc(note)}</div>` : ""}
@@ -926,6 +926,28 @@
       const cols = [["班級", "13%"], ["隊員（座號 姓名）", ""], ["成績（秒）", "16%"], ["名次", "8%"], ["備註", "14%"]];
       return `<section class="rec-sheet">${recHead(ev, regs.length)}
         <table class="rec-table">${recTh(cols)}<tbody>${rows}${recBlank(cols.length, blank)}</tbody></table></section>`;
+    }
+
+    // 這些年級的接力「每班都要跑」：依分道表（抽籤結果）排組次與道次，沒報名隊員的班級也列出（現場補記）
+    const REC_RELAY_BY_LANE = ["5年級"];
+    function recRelayLane(ev, regs, setup, blank) {
+      const byClass = groupByClass(regs), placed = new Set();
+      let heat = 0, body = "";
+      setup.grid.forEach(function (raw) {
+        const rows = [];
+        raw.map(normalizeClass).forEach((c, li) => { if (c) rows.push({ lane: setup.numbers[li], c }); });
+        if (!rows.length) return;
+        heat++;
+        rows.forEach(function (r, k) {
+          placed.add(r.c);
+          const members = (byClass[r.c] || []).map(st => esc(st["座號"] + " " + st["姓名"])).join("　");
+          body += `<tr class="relay-row${k === 0 ? " heat-first" : ""}">${k === 0 ? `<td class="hn" rowspan="${rows.length}">第${cnNum(heat)}組</td>` : ""}<td>${esc(r.lane)}</td><td class="nm">${esc(r.c)}</td><td style="text-align:left;font-size:12px">${members}</td><td></td><td></td><td></td><td></td></tr>`;
+        });
+      });
+      const cols = [["組次", "8%"], ["道次", "7%"], ["班級", "12%"], ["隊員（座號 姓名）", ""], ["成績（秒）", "14%"], ["組內名次", "9%"], ["總名次", "9%"], ["備註", "12%"]];
+      const miss = Object.keys(byClass).filter(c => !placed.has(c)).length;
+      return { miss, html: `<section class="rec-sheet">${recHead(ev, regs.length)}<div class="rec-note">各班都要出賽，組次與道次依抽籤結果排列；沒有報名隊員名單的班級，請在現場補記。每組跑完先記組內名次與秒數，全部跑完再依秒數排出總名次。</div>
+        <table class="rec-table">${recTh(cols)}<tbody>${body}${recBlank(cols.length, blank)}</tbody></table></section>` };
     }
 
     async function recGenerate() {
@@ -948,12 +970,16 @@
             .sort((a, b) => REC_ORDER.indexOf(a["名稱"]) - REC_ORDER.indexOf(b["名稱"]) || sexIdx(a["性別"]) - sexIdx(b["性別"]))
             .forEach(function (ev) {
               const regs = gRegs.filter(r => r["項目代碼"] === ev["代碼"]);
-              if (!regs.length) { skipped.push(recTitleText(ev)); return; }
+              const relayLane = RELAY.indexOf(ev["名稱"]) >= 0 && REC_RELAY_BY_LANE.indexOf(g) >= 0;
+              if (!regs.length && !relayLane) { skipped.push(recTitleText(ev)); return; }
               if (SPRINT.indexOf(ev["名稱"]) >= 0) {
                 const r = recSprint(ev, regs, setup, blank); html += r.html;
                 if (r.miss) warns.push(recTitleText(ev) + "：有 " + r.miss + " 人的班級不在分道表裡，沒有列入（請到「秩序冊產生」補上分道）");
               } else if (FIELD.indexOf(ev["名稱"]) >= 0) html += recField(ev, regs, blank);
-              else if (RELAY.indexOf(ev["名稱"]) >= 0) html += recRelay(ev, regs, blank);
+              else if (relayLane) {
+                const r = recRelayLane(ev, regs, setup, blank); html += r.html;
+                if (r.miss) warns.push(recTitleText(ev) + "：有 " + r.miss + " 個班級不在分道表裡，沒有列入（請到「秩序冊產生」補上分道）");
+              } else if (RELAY.indexOf(ev["名稱"]) >= 0) html += recRelay(ev, regs, blank);
               else return;
               sheets++; people += regs.length;
             });
