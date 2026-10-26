@@ -929,7 +929,7 @@
     }
 
     // 這些年級的接力「每班都要跑」：依分道表（抽籤結果）排組次與道次，沒報名隊員的班級也列出（現場補記）
-    const REC_RELAY_BY_LANE = ["5年級"];
+    const REC_RELAY_BY_LANE = ["5年級", "6年級"];
     function recRelayLane(ev, regs, setup, blank) {
       const byClass = groupByClass(regs), placed = new Set();
       let heat = 0, body = "", total = 0;
