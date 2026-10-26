@@ -16,6 +16,23 @@
     .prog-event { margin-bottom: 10px; }
     .prog-event h3 { color: var(--gold-d); margin-bottom: 4px; }
     .prog-cover { text-align: center; margin-bottom: 24px; }
+    /* 成績紀錄表（紙本） */
+    .rec-sheet { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .rec-sheet + .rec-sheet { break-before: page; }
+    .rec-school { font-size: 12px; color: #777; }
+    .rec-title { margin: 2px 0 6px; font-size: 20px; }
+    .rec-info { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; margin-bottom: 8px; align-items: baseline; }
+    .rec-info .ln { display: inline-block; width: 90px; border-bottom: 1px solid #333; height: 1em; vertical-align: baseline; }
+    .rec-note { font-size: 12px; color: #444; background: #faf7f1; border-radius: 6px; padding: 5px 9px; margin: 6px 0; white-space: pre-line; line-height: 1.5; }
+    .rec-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+    .rec-table th, .rec-table td { border: 1px solid #444; padding: 2px 4px; text-align: center; height: 30px; overflow-wrap: anywhere; }
+    .rec-table th { background: #f3ece0; height: auto; padding: 4px; font-size: 12px; }
+    .rec-table td.nm { font-weight: 700; }
+    .rec-table td.hn { font-weight: 800; background: #faf5ea; }
+    .rec-table tr { break-inside: avoid; }
+    .rec-table tr.heat-first td { border-top: 2.5px solid #222; }
+    .rec-table tr.relay-row td { height: 46px; }
+    @media print { .rec-sheet { border: none; border-radius: 0; padding: 0; margin: 0; } }
     /* 秩序冊：賽程時間表（日期卡片，兩欄） */
     .bk-sched { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .bk-sum { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); margin: 2px 0 10px; }
@@ -76,6 +93,7 @@
         <option value="schedule">賽事行事曆管理</option>
         <option value="program">秩序冊產生</option>
         <option value="reg">報名管理</option>
+        <option value="rec">成績紀錄表（紙本）</option>
         <option value="unreg">未報名班級（催繳通知）</option>
         <option value="user">帳號管理</option>
       </select>
@@ -203,6 +221,29 @@
       </section>
     </div>
 
+    <!-- 成績紀錄表（紙本）：依各項目報名名單產生現場記錄用表格 -->
+    <div class="func-panel" id="recWrap" style="display:none">
+      <section class="card no-print">
+        <h2>成績紀錄表（紙本）</h2>
+        <p class="muted">依各項目的報名名單，產生比賽現場給記錄員手寫的表格，<b>每個項目一張</b>。短跑照秩序冊的分道與組次排列；<b>跳高改為「垂直跳（摸高器）」</b>，表格含站立摸高、三次摸高與垂直跳成績。</p>
+        <div class="grid2">
+          <div><label>年級</label><select id="rec_grade"><option value="ALL">全年級（4～6 年級）</option><option>4年級</option><option>5年級</option><option>6年級</option></select></div>
+          <div><label>紙張方向</label><select id="rec_orient"><option value="portrait">直式 A4</option><option value="landscape">橫式 A4</option></select></div>
+          <div><label>每張表加幾列空白（補登用）</label><input id="rec_blank" type="number" min="0" max="10" value="2"></div>
+        </div>
+        <label>要產生的項目</label>
+        <div id="rec_types" class="row" style="gap:6px 18px"></div>
+        <label>垂直跳測驗說明（會印在表格上方，可修改）</label>
+        <textarea id="rec_vjnote" rows="4"></textarea>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="rec_gen" type="button">產生紀錄表</button>
+          <button class="btn" id="rec_print" type="button" style="display:none">🖨 列印</button>
+        </div>
+        <div id="rec_msg" style="margin-top:10px"></div>
+      </section>
+      <div id="rec_area"></div>
+    </div>
+
     <!-- 未報名班級：彙整後產生通知文字，可複製/分享到 LINE 群組/發布成網站公告 -->
     <div class="func-panel" id="unregWrap" style="display:none">
       <section class="card">
@@ -323,7 +364,7 @@
       if (hasPerm(AUTH, "行事曆")) loadSchedule();
       if (AUTH.role === "admin") loadUsers();
     }
-    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理", unreg: "報名管理" };
+    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理", unreg: "報名管理", rec: "成績" };
 
     // 新增/刪除類動作若結果在 Google 轉址那段遺失（ApiLostResponse），後端可能其實做完了：
     // 不自動重送（會重複新增），改成重新載入清單讓使用者看實際狀態。
@@ -341,6 +382,7 @@
     function showFunc(name){
       document.querySelectorAll(".func-panel").forEach(function(p){ p.style.display = "none"; });
       el(name+"Wrap").style.display = "block";
+      const pg = document.getElementById("rec_page"); if (pg && name !== "rec") pg.remove();   // 紀錄表的紙張方向只影響紀錄表
     }
     el("funcSelect").addEventListener("change", function(){ showFunc(this.value); });
 
@@ -823,6 +865,113 @@
       finally { setBusy(b, false); }
     }
 
+    /* ---- 成績紀錄表（紙本，給記錄員現場填寫） ---- */
+    const REC_ORDER = ["60公尺", "100公尺", "200公尺", "跳遠", "跳高", "壘球擲遠", "400公尺接力"];
+    const REC_LABEL = { "跳高": "垂直跳（摸高器；原跳高）" };
+    const VJ_NOTE = "測驗方式：①站立摸高：自然站立、腳跟著地，單手上舉觸摸摸高器，記錄站立摸高（公分）。\n②原地下蹲後垂直跳起，以同一隻手觸摸摸高器，每人測 3 次，記錄每次摸高（公分）。\n③垂直跳成績＝最佳摸高－站立摸高（公分），數值愈大名次愈前，成績相同者並列。";
+    let REC_EVENTS = [], REC_REGS = [];
+    function recInit() {
+      el("rec_types").innerHTML = REC_ORDER.map(n => `<label style="display:flex;align-items:center;gap:6px;margin:0;white-space:nowrap"><input type="checkbox" class="rec_type" value="${esc(n)}" checked style="width:auto">${esc(REC_LABEL[n] || n)}</label>`).join("");
+      el("rec_vjnote").value = VJ_NOTE;
+    }
+    const recName = ev => REC_LABEL[ev["名稱"]] || ev["名稱"];
+    const recTitleText = ev => recName(ev) + "（" + ev["組別"] + " " + ev["性別"] + "）";
+    function recHead(ev, n) {
+      return `<div class="rec-head"><div class="rec-school">${esc(CONFIG.schoolName)} ${esc(CONFIG.eventTitle)}　成績紀錄表</div>
+        <h2 class="rec-title">${esc(recTitleText(ev))}</h2>
+        <div class="rec-info"><span>項目代碼：${esc(ev["代碼"])}</span><span>報名人數：${n}</span>
+          <span>日期：<i class="ln"></i></span><span>地點：<i class="ln"></i></span><span>記錄員：<i class="ln"></i></span><span>裁判長：<i class="ln"></i></span></div></div>`;
+    }
+    const recBlank = (cols, n) => Array.from({ length: n }, () => `<tr class="blank">${"<td></td>".repeat(cols)}</tr>`).join("");
+    const recTh = cols => "<thead><tr>" + cols.map(c => `<th${c[1] ? ` style="width:${c[1]}"` : ""}>${c[0]}</th>`).join("") + "</tr></thead>";
+
+    // 短跑：組次、道次與秩序冊完全一致（同一份分道表），一位選手一列
+    function recSprint(ev, regs, setup, blank) {
+      const byClass = groupByClass(regs);
+      let heat = 0, body = "", placed = 0;
+      setup.grid.forEach(function (rawBatch) {
+        const batch = rawBatch.map(normalizeClass);
+        const maxN = Math.max(0, ...batch.map(c => c ? (byClass[c] || []).length : 0));
+        for (let i = 0; i < maxN; i++) {
+          heat++;
+          const rows = [];
+          batch.forEach((c, li) => { const st = c ? (byClass[c] || [])[i] : null; if (st) rows.push({ lane: setup.numbers[li], st }); });
+          placed += rows.length;
+          rows.forEach((r, k) => {
+            body += `<tr${k === 0 ? ' class="heat-first"' : ""}>${k === 0 ? `<td class="hn" rowspan="${rows.length}">第${cnNum(heat)}組</td>` : ""}<td>${esc(r.lane)}</td><td>${esc(r.st["班級"])}</td><td>${esc(r.st["座號"])}</td><td class="nm">${esc(r.st["姓名"])}</td><td></td><td></td><td></td><td></td></tr>`;
+          });
+        }
+      });
+      const cols = [["組次", "9%"], ["道次", "7%"], ["班級", "13%"], ["座號", "7%"], ["姓名", "14%"], ["成績（秒）", "17%"], ["組內名次", "9%"], ["總名次", "9%"], ["備註", ""]];
+      return { miss: regs.length - placed,
+        html: `<section class="rec-sheet">${recHead(ev, regs.length)}<div class="rec-note">每組跑完先記組內名次與秒數；全部組別跑完後，再依秒數排出總名次。</div>
+          <table class="rec-table">${recTh(cols)}<tbody>${body}${recBlank(cols.length, blank)}</tbody></table></section>` };
+    }
+    // 田賽：跳遠／壘球擲遠（3 次取最佳）；跳高改成垂直跳（摸高器）
+    function recField(ev, regs, blank) {
+      const g = groupByClass(regs), list = Object.keys(g).sort(classCompare).flatMap(c => g[c]);
+      const vj = ev["名稱"] === "跳高";
+      const cols = vj
+        ? [["編號", "6%"], ["班級", "11%"], ["座號", "6%"], ["姓名", "12%"], ["站立摸高<br>（cm）", "10%"], ["第1次<br>摸高", "9%"], ["第2次<br>摸高", "9%"], ["第3次<br>摸高", "9%"], ["最佳<br>摸高", "9%"], ["垂直跳成績<br>（最佳－站立）", "12%"], ["名次", "6%"], ["備註", ""]]
+        : [["編號", "7%"], ["班級", "12%"], ["座號", "7%"], ["姓名", "14%"], ["第1次", "11%"], ["第2次", "11%"], ["第3次", "11%"], ["最佳成績<br>（公尺）", "11%"], ["名次", "7%"], ["備註", ""]];
+      const rows = list.map((st, i) => `<tr><td>${i + 1}</td><td>${esc(st["班級"])}</td><td>${esc(st["座號"])}</td><td class="nm">${esc(st["姓名"])}</td>${"<td></td>".repeat(cols.length - 4)}</tr>`).join("");
+      const note = vj ? el("rec_vjnote").value.trim() : "每人試 3 次，取最佳成績（公尺，記到公分）；犯規請在格內註記 ×。成績相同者並列。";
+      return `<section class="rec-sheet">${recHead(ev, regs.length)}${note ? `<div class="rec-note">${esc(note)}</div>` : ""}
+        <table class="rec-table">${recTh(cols)}<tbody>${rows}${recBlank(cols.length, blank)}</tbody></table></section>`;
+    }
+    // 接力：一班一列，列出隊員
+    function recRelay(ev, regs, blank) {
+      const g = groupByClass(regs);
+      const rows = Object.keys(g).sort(classCompare).map(c => `<tr class="relay-row"><td class="nm">${esc(c)}</td><td style="text-align:left">${g[c].map(st => esc(st["座號"] + " " + st["姓名"])).join("　")}</td><td></td><td></td><td></td></tr>`).join("");
+      const cols = [["班級", "13%"], ["隊員（座號 姓名）", ""], ["成績（秒）", "16%"], ["名次", "8%"], ["備註", "14%"]];
+      return `<section class="rec-sheet">${recHead(ev, regs.length)}
+        <table class="rec-table">${recTh(cols)}<tbody>${rows}${recBlank(cols.length, blank)}</tbody></table></section>`;
+    }
+
+    async function recGenerate() {
+      const btn = el("rec_gen"); setBusy(btn, true, "產生中…");
+      el("rec_area").innerHTML = ""; el("rec_print").style.display = "none";
+      el("rec_msg").innerHTML = '<p class="muted">讀取報名資料中…</p>';
+      try {
+        const [evD, regD] = await Promise.all([apiGet("events"), apiGet("reglist")]);
+        REC_EVENTS = evD.events; REC_REGS = regD.regs;
+        const types = new Set(Array.from(document.querySelectorAll(".rec_type:checked")).map(c => c.value));
+        if (!types.size) { el("rec_msg").innerHTML = '<div class="error">請至少勾選一種項目。</div>'; return; }
+        const blank = Math.max(0, Math.min(10, Number(el("rec_blank").value) || 0));
+        const gsel = el("rec_grade").value, grades = gsel === "ALL" ? ["4年級", "5年級", "6年級"] : [gsel];
+        const sexIdx = x => ["男", "女", "混合"].indexOf(String(x));
+        let html = "", sheets = 0, people = 0; const skipped = [], warns = [];
+        grades.forEach(function (g) {
+          const gRegs = REC_REGS.filter(r => r["年級"] === g);
+          const setup = laneSetupFor(g, gRegs);
+          REC_EVENTS.filter(e => !isNoRegEvent(e) && types.has(e["名稱"]) && e["組別"] === g)
+            .sort((a, b) => REC_ORDER.indexOf(a["名稱"]) - REC_ORDER.indexOf(b["名稱"]) || sexIdx(a["性別"]) - sexIdx(b["性別"]))
+            .forEach(function (ev) {
+              const regs = gRegs.filter(r => r["項目代碼"] === ev["代碼"]);
+              if (!regs.length) { skipped.push(recTitleText(ev)); return; }
+              if (SPRINT.indexOf(ev["名稱"]) >= 0) {
+                const r = recSprint(ev, regs, setup, blank); html += r.html;
+                if (r.miss) warns.push(recTitleText(ev) + "：有 " + r.miss + " 人的班級不在分道表裡，沒有列入（請到「秩序冊產生」補上分道）");
+              } else if (FIELD.indexOf(ev["名稱"]) >= 0) html += recField(ev, regs, blank);
+              else if (RELAY.indexOf(ev["名稱"]) >= 0) html += recRelay(ev, regs, blank);
+              else return;
+              sheets++; people += regs.length;
+            });
+        });
+        el("rec_area").innerHTML = html;
+        let st = document.getElementById("rec_page");
+        if (!st) { st = document.createElement("style"); st.id = "rec_page"; document.head.appendChild(st); }
+        st.textContent = `@page { size: A4 ${el("rec_orient").value}; margin: 10mm; }`;
+        if (!sheets) { el("rec_msg").innerHTML = '<div class="notice">目前沒有可產生的紀錄表（所選項目還沒有人報名）。</div>'; return; }
+        el("rec_msg").innerHTML = `<div class="notice">已產生 <b>${sheets}</b> 張紀錄表（共 ${people} 人次），往下捲可預覽，確認後按「🖨 列印」。每個項目會自動從新的一頁開始。</div>` +
+          (skipped.length ? `<div class="muted" style="font-size:13px">無人報名而略過：${skipped.map(esc).join("、")}</div>` : "") +
+          warns.map(w => `<div class="api-warning">⚠ ${esc(w)}</div>`).join("");
+        el("rec_print").style.display = "";
+        toast("紀錄表已產生", "ok");
+      } catch (e) { el("rec_msg").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+      finally { setBusy(btn, false); }
+    }
+
     /* ---- 秩序冊產生 ---- */
     const USABLE_LANES = 4;
     const LANE_COLORS = ["藍", "綠", "黃", "紅", "橘", "白"];
@@ -1164,6 +1313,9 @@
     el("u_copy").addEventListener("click", copyUnregMsg);
     el("u_msg").addEventListener("input", updateLineLink);
     el("u_pub").addEventListener("click", publishUnreg);
+    recInit();
+    el("rec_gen").addEventListener("click", recGenerate);
+    el("rec_print").addEventListener("click", function () { window.print(); });
     loadClassCounts();
     el("s_save").addEventListener("click", saveSchedule);
     el("s_cancelEdit").addEventListener("click", cancelEdit);
