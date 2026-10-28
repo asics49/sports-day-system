@@ -238,7 +238,9 @@
         <div class="row" style="margin-top:12px">
           <button class="btn" id="rec_gen" type="button">產生紀錄表</button>
           <button class="btn" id="rec_print" type="button" style="display:none">🖨 列印</button>
+          <button class="btn ghost" id="rec_xlsx" type="button">⬇ 下載 Excel 版（比賽後輸入成績用）</button>
         </div>
+        <p class="muted" style="font-size:13px;margin:8px 0 0">Excel 版＝同樣的項目、同樣的順序，一個項目一個工作表。紙本寫完後，把成績打進 Excel，再到「成績輸入」頁用「紀錄表 Excel 匯入」，名次與積分由系統計算。</p>
         <div id="rec_msg" style="margin-top:10px"></div>
       </section>
       <div id="rec_area"></div>
@@ -949,39 +951,50 @@
         <table class="rec-table">${recTh(cols)}<tbody>${body}${recBlank(cols.length, blank)}</tbody></table></section>` };
     }
 
+    // 讀資料並決定要產生哪些項目（紙本與 Excel 共用）
+    async function recPlan() {
+      const [evD, regD] = await Promise.all([apiGet("events"), apiGet("reglist")]);
+      REC_EVENTS = evD.events; REC_REGS = regD.regs;
+      const types = new Set(Array.from(document.querySelectorAll(".rec_type:checked")).map(c => c.value));
+      const gsel = el("rec_grade").value, grades = gsel === "ALL" ? ["4年級", "5年級", "6年級"] : [gsel];
+      const sexIdx = x => ["男", "女", "混合"].indexOf(String(x));
+      const items = [], skipped = [];
+      grades.forEach(function (g) {
+        const gRegs = REC_REGS.filter(r => r["年級"] === g);
+        const setup = laneSetupFor(g, gRegs);
+        REC_EVENTS.filter(e => !isNoRegEvent(e) && types.has(e["名稱"]) && e["組別"] === g)
+          .sort((a, b) => REC_ORDER.indexOf(a["名稱"]) - REC_ORDER.indexOf(b["名稱"]) || sexIdx(a["性別"]) - sexIdx(b["性別"]))
+          .forEach(function (ev) {
+            const regs = gRegs.filter(r => r["項目代碼"] === ev["代碼"]);
+            const relayLane = RELAY.indexOf(ev["名稱"]) >= 0 && REC_RELAY_BY_LANE.indexOf(g) >= 0;
+            if (!regs.length && !relayLane) { skipped.push(recTitleText(ev)); return; }
+            items.push({ ev, g, regs, setup, relayLane });
+          });
+      });
+      return { types, items, skipped };
+    }
+
     async function recGenerate() {
       const btn = el("rec_gen"); setBusy(btn, true, "產生中…");
       el("rec_area").innerHTML = ""; el("rec_print").style.display = "none";
       el("rec_msg").innerHTML = '<p class="muted">讀取報名資料中…</p>';
       try {
-        const [evD, regD] = await Promise.all([apiGet("events"), apiGet("reglist")]);
-        REC_EVENTS = evD.events; REC_REGS = regD.regs;
-        const types = new Set(Array.from(document.querySelectorAll(".rec_type:checked")).map(c => c.value));
-        if (!types.size) { el("rec_msg").innerHTML = '<div class="error">請至少勾選一種項目。</div>'; return; }
+        const plan = await recPlan();
+        if (!plan.types.size) { el("rec_msg").innerHTML = '<div class="error">請至少勾選一種項目。</div>'; return; }
         const blank = Math.max(0, Math.min(10, Number(el("rec_blank").value) || 0));
-        const gsel = el("rec_grade").value, grades = gsel === "ALL" ? ["4年級", "5年級", "6年級"] : [gsel];
-        const sexIdx = x => ["男", "女", "混合"].indexOf(String(x));
-        let html = "", sheets = 0, people = 0; const skipped = [], warns = [];
-        grades.forEach(function (g) {
-          const gRegs = REC_REGS.filter(r => r["年級"] === g);
-          const setup = laneSetupFor(g, gRegs);
-          REC_EVENTS.filter(e => !isNoRegEvent(e) && types.has(e["名稱"]) && e["組別"] === g)
-            .sort((a, b) => REC_ORDER.indexOf(a["名稱"]) - REC_ORDER.indexOf(b["名稱"]) || sexIdx(a["性別"]) - sexIdx(b["性別"]))
-            .forEach(function (ev) {
-              const regs = gRegs.filter(r => r["項目代碼"] === ev["代碼"]);
-              const relayLane = RELAY.indexOf(ev["名稱"]) >= 0 && REC_RELAY_BY_LANE.indexOf(g) >= 0;
-              if (!regs.length && !relayLane) { skipped.push(recTitleText(ev)); return; }
-              if (SPRINT.indexOf(ev["名稱"]) >= 0) {
-                const r = recSprint(ev, regs, setup, blank); html += r.html;
-                if (r.miss) warns.push(recTitleText(ev) + "：有 " + r.miss + " 人的班級不在分道表裡，沒有列入（請到「秩序冊產生」補上分道）");
-              } else if (FIELD.indexOf(ev["名稱"]) >= 0) html += recField(ev, regs, blank);
-              else if (relayLane) {
-                const r = recRelayLane(ev, regs, setup, blank); html += r.html;
-                if (r.miss) warns.push(recTitleText(ev) + "：有 " + r.miss + " 個班級不在分道表裡，沒有列入（請到「秩序冊產生」補上分道）");
-              } else if (RELAY.indexOf(ev["名稱"]) >= 0) html += recRelay(ev, regs, blank);
-              else return;
-              sheets++; people += regs.length;
-            });
+        let html = "", sheets = 0, people = 0; const warns = [];
+        plan.items.forEach(function (it) {
+          const { ev, regs, setup } = it;
+          if (SPRINT.indexOf(ev["名稱"]) >= 0) {
+            const r = recSprint(ev, regs, setup, blank); html += r.html;
+            if (r.miss) warns.push(recTitleText(ev) + "：有 " + r.miss + " 人的班級不在分道表裡，沒有列入（請到「秩序冊產生」補上分道）");
+          } else if (FIELD.indexOf(ev["名稱"]) >= 0) html += recField(ev, regs, blank);
+          else if (it.relayLane) {
+            const r = recRelayLane(ev, regs, setup, blank); html += r.html;
+            if (r.miss) warns.push(recTitleText(ev) + "：有 " + r.miss + " 個班級不在分道表裡，沒有列入（請到「秩序冊產生」補上分道）");
+          } else if (RELAY.indexOf(ev["名稱"]) >= 0) html += recRelay(ev, regs, blank);
+          else return;
+          sheets++; people += regs.length;
         });
         el("rec_area").innerHTML = html;
         let st = document.getElementById("rec_page");
@@ -989,11 +1002,81 @@
         st.textContent = `@page { size: A4 ${el("rec_orient").value}; margin: 10mm; }`;
         if (!sheets) { el("rec_msg").innerHTML = '<div class="notice">目前沒有可產生的紀錄表（所選項目還沒有人報名）。</div>'; return; }
         el("rec_msg").innerHTML = `<div class="notice">已產生 <b>${sheets}</b> 張紀錄表（共 ${people} 人次），往下捲可預覽，確認後按「🖨 列印」。每個項目會自動從新的一頁開始。</div>` +
-          (skipped.length ? `<div class="muted" style="font-size:13px">無人報名而略過：${skipped.map(esc).join("、")}</div>` : "") +
+          (plan.skipped.length ? `<div class="muted" style="font-size:13px">無人報名而略過：${plan.skipped.map(esc).join("、")}</div>` : "") +
           warns.map(w => `<div class="api-warning">⚠ ${esc(w)}</div>`).join("");
         el("rec_print").style.display = "";
         toast("紀錄表已產生", "ok");
       } catch (e) { el("rec_msg").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+      finally { setBusy(btn, false); }
+    }
+
+    /* ---- 紀錄表 Excel 版：同樣的項目與順序，一個項目一個工作表；成績輸入頁「紀錄表 Excel 匯入」會讀它 ----
+     * 工作表版面（匯入程式靠它辨識，不要改）：第 2 列 A=「項目代碼」、B=代碼；標題列含「班級」「姓名」；成績欄 X＝未出賽／犯規 */
+    function recExcelSheet(it) {
+      const { ev, regs, setup, relayLane } = it, name = ev["名稱"];
+      const head = [[recTitleText(ev)], ["項目代碼", ev["代碼"]], ["填寫說明：成績直接填數字；未出賽或犯規填大寫 X；不用填名次（匯入時由系統依成績計算）。請勿修改第 2 列與標題列。"], []];
+      let cols, rows = [], widths;
+      const g = groupByClass(regs), list = () => Object.keys(g).sort(classCompare).flatMap(c => g[c]);
+      if (SPRINT.indexOf(name) >= 0) {
+        cols = ["組次", "道次", "班級", "座號", "姓名", "成績（秒）", "備註"]; widths = [8, 7, 12, 7, 12, 14, 18];
+        let heat = 0;
+        setup.grid.forEach(function (raw) {
+          const batch = raw.map(normalizeClass);
+          const maxN = Math.max(0, ...batch.map(c => c ? (g[c] || []).length : 0));
+          for (let i = 0; i < maxN; i++) {
+            heat++;
+            batch.forEach((c, li) => { const st = c ? (g[c] || [])[i] : null; if (st) rows.push(["第" + cnNum(heat) + "組", setup.numbers[li], st["班級"], Number(st["座號"]) || st["座號"], st["姓名"], null, null]); });
+          }
+        });
+      } else if (relayLane) {
+        cols = ["組次", "道次", "班級", "成績（秒）", "備註"]; widths = [8, 7, 12, 14, 18];
+        let heat = 0;
+        setup.grid.forEach(function (raw) {
+          const cs = raw.map(normalizeClass).map((c, li) => c ? [setup.numbers[li], c] : null).filter(Boolean);
+          if (!cs.length) return;
+          heat++; cs.forEach(x => rows.push(["第" + cnNum(heat) + "組", x[0], x[1], null, null]));
+        });
+      } else if (RELAY.indexOf(name) >= 0) {
+        cols = ["班級", "成績（秒）", "備註"]; widths = [12, 14, 18];
+        Object.keys(g).sort(classCompare).forEach(c => rows.push([c, null, null]));
+      } else if (name === "跳高") {   // 垂直跳（摸高器）
+        cols = ["編號", "班級", "座號", "姓名", "站立摸高（cm）", "第1次摸高", "第2次摸高", "第3次摸高", "最佳摸高（選填）", "備註"]; widths = [6, 12, 7, 12, 14, 11, 11, 11, 15, 16];
+        list().forEach((st, i) => rows.push([i + 1, st["班級"], Number(st["座號"]) || st["座號"], st["姓名"], null, null, null, null, null, null]));
+        head[2] = ["填寫說明：摸高填公分數字；未出賽或犯規填大寫 X。垂直跳成績＝最佳摸高－站立摸高，由系統計算；最佳摸高可不填（系統取三次最高）。請勿修改第 2 列與標題列。"];
+      } else {
+        cols = ["編號", "班級", "座號", "姓名", "第1次", "第2次", "第3次", "最佳成績（選填）", "備註"]; widths = [6, 12, 7, 12, 10, 10, 10, 16, 16];
+        list().forEach((st, i) => rows.push([i + 1, st["班級"], Number(st["座號"]) || st["座號"], st["姓名"], null, null, null, null, null]));
+        head[2] = ["填寫說明：成績填公尺數字（記到公分）；未出賽或犯規填大寫 X；最佳成績可不填（系統取三次最好的）。請勿修改第 2 列與標題列。"];
+      }
+      const ws = XLSX.utils.aoa_to_sheet(head.concat([cols], rows));
+      ws["!cols"] = widths.map(w => ({ wch: w }));
+      return ws;
+    }
+    async function recExcel() {
+      const btn = el("rec_xlsx"); setBusy(btn, true, "產生中…");
+      try {
+        const plan = await recPlan();
+        if (!plan.types.size) return toast("請至少勾選一種項目", "err");
+        if (!plan.items.length) return toast("目前沒有可產生的項目（所選項目還沒有人報名）", "err");
+        const wb = XLSX.utils.book_new(), used = {};
+        const guide = [["成績紀錄表（Excel 版）填寫說明"], [""],
+          ["1. 一個項目一個工作表；請勿修改第 2 列的「項目代碼」與標題列，也不要改工作表順序以外的結構。"],
+          ["2. 成績直接填數字：短跑／接力填秒（可填 1:05.32 這種分:秒），跳遠、壘球擲遠填公尺，垂直跳填摸高公分。"],
+          ["3. 未出賽或犯規一律填大寫 X（不計名次）；空白會被當成「還沒填」，匯入預覽會提醒。"],
+          ["4. 不用填名次與得分：匯入時由系統依成績計算（短跑與接力秒數小者為先；跳遠、壘球擲遠、垂直跳數值大者為先；同成績並列）。"],
+          ["5. 填完存檔，到網站「成績輸入」頁最下方的「紀錄表 Excel 匯入」選擇檔案，預覽確認後送出。同一項目重複匯入會整個覆蓋。"]];
+        const wsg = XLSX.utils.aoa_to_sheet(guide); wsg["!cols"] = [{ wch: 100 }];
+        XLSX.utils.book_append_sheet(wb, wsg, "填寫說明");
+        plan.items.forEach(function (it) {
+          const short = (it.ev["名稱"] === "跳高" ? "垂直跳" : it.ev["名稱"]) + "_" + it.g.replace("年級", "") + (it.ev["性別"] === "混合" ? "" : it.ev["性別"]);
+          let nm = short.slice(0, 28), k = 2; while (used[nm]) nm = short.slice(0, 26) + "_" + k++;
+          used[nm] = true;
+          XLSX.utils.book_append_sheet(wb, recExcelSheet(it), nm);
+        });
+        const scope = el("rec_grade").value === "ALL" ? "全年級" : el("rec_grade").value;
+        XLSX.writeFile(wb, "成績紀錄表_" + scope + "_" + todayLocal().replace(/-/g, "") + ".xlsx");
+        toast("已下載 Excel 版（" + plan.items.length + " 個項目）", "ok");
+      } catch (e) { toast(e.message, "err"); }
       finally { setBusy(btn, false); }
     }
 
@@ -1341,6 +1424,7 @@
     recInit();
     el("rec_gen").addEventListener("click", recGenerate);
     el("rec_print").addEventListener("click", function () { window.print(); });
+    el("rec_xlsx").addEventListener("click", recExcel);
     loadClassCounts();
     el("s_save").addEventListener("click", saveSchedule);
     el("s_cancelEdit").addEventListener("click", cancelEdit);
