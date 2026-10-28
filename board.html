@@ -26,12 +26,9 @@
     .dot { width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block; animation:blink 1.4s infinite; }
     @keyframes blink { 50%{opacity:.25} }
     .fs-btn { cursor:pointer; }
-    .done-wrap { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px; }
-    .done-wrap h3 { margin:0 0 8px; font-size:15px; }
-    .done-list { display:flex; flex-wrap:wrap; gap:8px; }
-    .done-chip { border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 14px; font:inherit; font-size:14px; cursor:pointer; }
-    .done-chip:hover { border-color:var(--gold-d); }
-    .done-chip.on { background:var(--gold-d); color:#fff; border-color:var(--gold-d); font-weight:700; }
+    .done-wrap { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px; display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+    .done-wrap label { margin:0; font-weight:700; }
+    .done-wrap select { flex:1; min-width:220px; max-width:420px; }
   </style>
 </head>
 <body data-page="board">
@@ -57,8 +54,8 @@
         <button class="btn ghost" id="now" type="button" style="padding:6px 14px">立即更新</button>
       </div>
       <div class="done-wrap" id="doneBox" style="display:none">
-        <h3>✅ 已完賽項目（點選即可查看成績）</h3>
-        <div class="done-list" id="doneList"></div>
+        <label for="doneSel">✅ 已完賽項目</label>
+        <select id="doneSel"></select>
       </div>
     </section>
 
@@ -116,8 +113,9 @@
         return last[e["代碼"]] != null && (!grade || e["組別"] == grade || e["組別"] == "全校" || String(e["組別"]).indexOf(grade) >= 0);
       }).sort(function (a, b) { return last[b["代碼"]] - last[a["代碼"]]; });
       el("doneBox").style.display = list.length ? "" : "none";
-      el("doneList").innerHTML = list.map(function (e) {
-        return `<button type="button" class="done-chip${e["代碼"] == el("code").value ? " on" : ""}" data-code="${esc(e["代碼"])}">${esc(e["名稱"])} ${esc(e["組別"])}${e["性別"] && e["性別"] !== "混合" ? " " + esc(e["性別"]) : ""}</button>`;
+      const cur = el("code").value;
+      el("doneSel").innerHTML = '<option value="">請選擇已完賽項目（共 ' + list.length + ' 項）</option>' + list.map(function (e) {
+        return `<option value="${esc(e["代碼"])}"${e["代碼"] == cur ? " selected" : ""}>${esc(e["名稱"])} ${esc(e["組別"])}${e["性別"] && e["性別"] !== "混合" ? " " + esc(e["性別"]) : ""}</option>`;
       }).join("");
     }
 
@@ -163,10 +161,9 @@
 
     el("grade").addEventListener("change", function () { renderCodeOptions(); if (!PICKED) el("code").value = ""; cd = 15; load(); });
     el("code").addEventListener("change", function () { PICKED = !!el("code").value; cd = 15; load(); });
-    el("doneList").addEventListener("click", function (ev) {
-      const b = ev.target.closest(".done-chip"); if (!b) return;
-      el("code").value = b.dataset.code; PICKED = true; cd = 15; load();
-      window.scrollTo({ top: el("bt").getBoundingClientRect().top + window.scrollY - 80, behavior: "smooth" });
+    el("doneSel").addEventListener("change", function () {
+      if (!this.value) return;
+      el("code").value = this.value; PICKED = true; cd = 15; load();
     });
     el("now").addEventListener("click", function () { cd = 15; load(); });
     el("fsBtn").addEventListener("click", function () {
