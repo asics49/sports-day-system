@@ -26,6 +26,12 @@
     .dot { width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block; animation:blink 1.4s infinite; }
     @keyframes blink { 50%{opacity:.25} }
     .fs-btn { cursor:pointer; }
+    .done-wrap { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px; }
+    .done-wrap h3 { margin:0 0 8px; font-size:15px; }
+    .done-list { display:flex; flex-wrap:wrap; gap:8px; }
+    .done-chip { border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 14px; font:inherit; font-size:14px; cursor:pointer; }
+    .done-chip:hover { border-color:var(--gold-d); }
+    .done-chip.on { background:var(--gold-d); color:#fff; border-color:var(--gold-d); font-weight:700; }
   </style>
 </head>
 <body data-page="board">
@@ -49,6 +55,10 @@
         <label style="margin:0;display:flex;align-items:center;gap:6px"><input type="checkbox" id="auto" checked style="width:auto"> 自動更新</label>
         <span><span class="dot"></span> 每 <b>15</b> 秒重新整理　下次：<b id="cd">–</b> 秒</span>
         <button class="btn ghost" id="now" type="button" style="padding:6px 14px">立即更新</button>
+      </div>
+      <div class="done-wrap" id="doneBox" style="display:none">
+        <h3>✅ 已完賽項目（點選即可查看成績）</h3>
+        <div class="done-list" id="doneList"></div>
       </div>
     </section>
 
@@ -98,11 +108,26 @@
       return codes[0] || "";
     }
 
+    // 已完賽（有成績）的項目，依最近公布時間排序，點選＝切換到該項目
+    function renderDone(results) {
+      const grade = el("grade").value, last = {};
+      results.forEach(function (r) { const t = new Date(r["時間"]).getTime() || 0, c = r["項目代碼"]; if (!(last[c] >= t)) last[c] = t; });
+      const list = EVENTS.filter(function (e) {
+        return last[e["代碼"]] != null && (!grade || e["組別"] == grade || e["組別"] == "全校" || String(e["組別"]).indexOf(grade) >= 0);
+      }).sort(function (a, b) { return last[b["代碼"]] - last[a["代碼"]]; });
+      el("doneBox").style.display = list.length ? "" : "none";
+      el("doneList").innerHTML = list.map(function (e) {
+        return `<button type="button" class="done-chip${e["代碼"] == el("code").value ? " on" : ""}" data-code="${esc(e["代碼"])}">${esc(e["名稱"])} ${esc(e["組別"])}${e["性別"] && e["性別"] !== "混合" ? " " + esc(e["性別"]) : ""}</button>`;
+      }).join("");
+    }
+
     async function load() {
       let data0 = null;
-      if (!PICKED) {
-        try { data0 = await apiGet("query"); const c = latestCode(data0.results || []); if (c) el("code").value = c; } catch (e) { /* 下面照一般流程顯示 */ }
-      }
+      try {
+        data0 = await apiGet("query");
+        if (!PICKED) { const c = latestCode(data0.results || []); if (c) el("code").value = c; }
+        renderDone(data0.results || []);
+      } catch (e) { /* 下面照一般流程顯示 */ }
       const code = el("code").value;
       if (!code) { el("bt").textContent = "即時成績公布"; el("bs").textContent = "請選擇上方項目"; el("out").innerHTML = ""; return; }
       const ev = EVENTS.find(function (e) { return e["代碼"] == code; }) || {};
@@ -138,6 +163,11 @@
 
     el("grade").addEventListener("change", function () { renderCodeOptions(); if (!PICKED) el("code").value = ""; cd = 15; load(); });
     el("code").addEventListener("change", function () { PICKED = !!el("code").value; cd = 15; load(); });
+    el("doneList").addEventListener("click", function (ev) {
+      const b = ev.target.closest(".done-chip"); if (!b) return;
+      el("code").value = b.dataset.code; PICKED = true; cd = 15; load();
+      window.scrollTo({ top: el("bt").getBoundingClientRect().top + window.scrollY - 80, behavior: "smooth" });
+    });
     el("now").addEventListener("click", function () { cd = 15; load(); });
     el("fsBtn").addEventListener("click", function () {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
