@@ -103,10 +103,10 @@
             <div class="g">${esc(e["組別"] || it.rows[0]["組別"] || "")} ${esc(e["性別"] || "")}</div><ol>${top.map(r =>
               `<li><span class="m">${MEDAL[Number(r["名次"]) - 1] || r["名次"]}</span><span class="n"><b>${esc(r["班級"])}</b> ${esc(r["姓名"] || "")}</span><span class="r">${esc(r["紀錄"] === "" || r["紀錄"] == null ? "" : r["紀錄"])}</span></li>`).join("")}</ol></div>`;
         }).join("");
-        // 班級積分依年級分開排名（同分並列）；各年級前三名
+        // 班級積分依年級分開排名（同分並列）；各年級前五名
         const rkAll = rkD.ranking || [];
         const rkHtml = ["6年級", "5年級", "4年級"].map(g => {
-          const list = rkAll.filter(r => r["年級"] === g).sort((a, b) => Number(b["總分"]) - Number(a["總分"])).slice(0, 3);
+          const list = rkAll.filter(r => r["年級"] === g).sort((a, b) => Number(b["總分"]) - Number(a["總分"])).slice(0, 5);
           let prev = null, rank = 0;
           list.forEach((r, i) => { if (Number(r["總分"]) !== prev) { rank = i + 1; prev = Number(r["總分"]); } r._rk = rank; });
           return list.length ? `<div class="live-rank"><div class="t">🏆 ${esc(g)}班級積分</div><ol>${list.map(r =>

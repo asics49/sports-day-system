@@ -63,13 +63,14 @@
   <script src="js/api.js?v=20261022d"></script>
   <script src="js/layout.js?v=20261022d"></script>
   <script>
-    let EVENTS = [], timer = null, cd = 15;
+    let EVENTS = [], timer = null, cd = 15, PICKED = false;   // PICKED＝使用者手動選過項目；沒選就自動顯示最近公布的項目
 
     (async function fillEvents() {
       try {
         const data = await apiGet("events");
         EVENTS = data.events;
         renderCodeOptions();
+        load();
       } catch (e) { el("out").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     })();
 
@@ -87,15 +88,29 @@
       });
     }
 
+    // 目前年級篩選下，最近公布成績的項目代碼
+    function latestCode(results) {
+      const grade = el("grade").value, ok = {};
+      EVENTS.forEach(function (e) { if (!grade || e["組別"] == grade || e["組別"] == "全校" || String(e["組別"]).indexOf(grade) >= 0) ok[e["代碼"]] = true; });
+      const last = {};
+      results.forEach(function (r) { const t = new Date(r["時間"]).getTime() || 0, c = r["項目代碼"]; if (ok[c] && !(last[c] >= t)) last[c] = t; });
+      const codes = Object.keys(last).sort(function (a, b) { return last[b] - last[a]; });
+      return codes[0] || "";
+    }
+
     async function load() {
+      let data0 = null;
+      if (!PICKED) {
+        try { data0 = await apiGet("query"); const c = latestCode(data0.results || []); if (c) el("code").value = c; } catch (e) { /* 下面照一般流程顯示 */ }
+      }
       const code = el("code").value;
       if (!code) { el("bt").textContent = "即時成績公布"; el("bs").textContent = "請選擇上方項目"; el("out").innerHTML = ""; return; }
       const ev = EVENTS.find(function (e) { return e["代碼"] == code; }) || {};
       el("bt").textContent = ev["名稱"] || "成績";
       el("bs").textContent = (ev["組別"] || "") + "　" + (ev["性別"] || "");
       try {
-        const data = await apiGet("query", { code });
-        const rows = data.results.slice().sort(function (a, b) { return (a["名次"] || 99) - (b["名次"] || 99); });
+        const data = data0 || await apiGet("query", { code });
+        const rows = data.results.filter(function (r) { return r["項目代碼"] == code; }).sort(function (a, b) { return (a["名次"] || 99) - (b["名次"] || 99); });
         if (!rows.length) { el("out").innerHTML = '<div class="notice" style="text-align:center;font-size:clamp(15px,2vw,22px)">此項目尚未公布成績</div>'; return; }
         const medal = ["🥇","🥈","🥉"];
         const body = rows.map(function (r) {
@@ -116,13 +131,13 @@
     }
 
     function tick() {
-      if (!el("auto").checked || !el("code").value) { el("cd").textContent = "–"; return; }
+      if (!el("auto").checked) { el("cd").textContent = "–"; return; }
       cd--; el("cd").textContent = cd;
       if (cd <= 0) { cd = 15; load(); }
     }
 
-    el("grade").addEventListener("change", renderCodeOptions);
-    el("code").addEventListener("change", function () { cd = 15; load(); });
+    el("grade").addEventListener("change", function () { renderCodeOptions(); if (!PICKED) el("code").value = ""; cd = 15; load(); });
+    el("code").addEventListener("change", function () { PICKED = !!el("code").value; cd = 15; load(); });
     el("now").addEventListener("click", function () { cd = 15; load(); });
     el("fsBtn").addEventListener("click", function () {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
