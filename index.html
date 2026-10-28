@@ -8,10 +8,45 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css?v=20261022d">
+  <style>
+    /* 首頁即時成績 */
+    .live-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+    .live-head h2 { margin: 0; }
+    .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 5px; animation: liveblink 1.4s infinite; }
+    @keyframes liveblink { 50% { opacity: .25; } }
+    .live-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+    .live-events { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; align-content: start; }
+    .live-ev { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; box-shadow: 0 2px 8px rgba(120,90,30,.06); border-top: 4px solid var(--tc); }
+    .live-ev .t { font-weight: 800; display: flex; justify-content: space-between; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+    .live-ev .t small { font-weight: 400; color: var(--muted); font-size: 12px; }
+    .live-ev .g { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .live-ev ol { list-style: none; margin: 0; padding: 0; }
+    .live-ev li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; border-top: 1px dashed var(--line); font-size: 14px; }
+    .live-ev li:first-child { border-top: none; }
+    .live-ev .m { flex: 0 0 22px; text-align: center; }
+    .live-ev .n { flex: 1; min-width: 0; }
+    .live-ev .n b { font-weight: 700; }
+    .live-ev .r { font-size: 13px; color: #5d564f; white-space: nowrap; }
+    .live-rank { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fffaf0; align-self: start; }
+    .live-rank .t { font-weight: 800; margin-bottom: 4px; }
+    .live-rank li { display: flex; gap: 8px; padding: 3px 0; border-top: 1px dashed var(--line); font-size: 14px; }
+    .live-rank li:first-of-type { border-top: none; }
+    .live-rank ol { list-style: none; margin: 0; padding: 0; }
+    .live-rank .c { flex: 1; }
+    .live-rank .p { font-weight: 800; color: var(--gold-d); }
+    .live-foot { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 14px; }
+    @media (max-width: 760px) { .live-grid { grid-template-columns: 1fr; } }
+  </style>
 </head>
 <body data-page="home">
   <main>
     <div id="nextBox"></div>
+    <section class="card" id="liveCard" style="display:none">
+      <div class="live-head"><h2>📣 即時成績</h2><span class="muted" style="font-size:13px"><i class="live-dot"></i><span id="liveSub"></span></span></div>
+      <div class="live-grid"><div class="live-events" id="liveEv"></div><div id="liveRk"></div></div>
+      <div class="live-foot"><a href="board.html">看完整成績公布 →</a><a href="ranking.html">班級積分排行 →</a><a href="query.html">查詢個人成績 →</a></div>
+    </section>
+
     <section class="tiles">
       <a class="tile" href="register.html"><div class="ico">📝</div><div class="t">線上報名</div><div class="d">個人單項 · 每人限 2 項</div></a>
       <a class="tile" href="board.html"><div class="ico">📣</div><div class="t">即時成績公布</div><div class="d">大螢幕 · 自動更新</div></a>
@@ -37,6 +72,43 @@
   <script src="js/layout.js?v=20261022d"></script>
   <script src="js/sched.js?v=20261022d"></script>
   <script>
+    // 即時成績：最近公布的項目（前三名）＋班級積分前五名；每 30 秒自動更新（分頁在背景時暫停）
+    const LIVE_N = 6, MEDAL = ["🥇", "🥈", "🥉"];
+    function liveTime(t) {
+      const d = new Date(t), m = Math.round((Date.now() - d) / 60000);
+      if (isNaN(d)) return "";
+      if (m < 1) return "剛剛";
+      if (m < 60) return m + " 分鐘前";
+      return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    }
+    async function loadLive() {
+      try {
+        const [evD, qD, rkD] = await Promise.all([apiGet("events"), apiGet("query"), apiGet("ranking")]);
+        const results = qD.results || [];
+        if (!results.length) { el("liveCard").style.display = "none"; return; }
+        const evs = evD.events.filter(e => !isNoRegEvent(e)), idx = {};
+        evD.events.forEach((e, i) => { idx[e["代碼"]] = { e, i }; });
+        const by = {};
+        results.forEach(r => (by[r["項目代碼"]] || (by[r["項目代碼"]] = [])).push(r));
+        const items = Object.keys(by).map(code => ({ code, rows: by[code], t: Math.max(...by[code].map(r => new Date(r["時間"]).getTime() || 0)), i: idx[code] ? idx[code].i : 999, e: idx[code] ? idx[code].e : null }))
+          .sort((a, b) => b.t - a.t || a.i - b.i);
+        el("liveSub").textContent = "已公布 " + items.length + " / " + evs.length + " 個項目　更新於 " + liveTime(Date.now()).replace("剛剛", new Date().toTimeString().slice(0, 5));
+        el("liveEv").innerHTML = items.slice(0, LIVE_N).map(it => {
+          const e = it.e || {}, tc = schedTypeOf(e["名稱"] || it.rows[0]["項目名稱"]);
+          const top = it.rows.filter(r => Number(r["名次"]) <= 3).sort((a, b) => a["名次"] - b["名次"]);
+          return `<div class="live-ev t-${tc}"><div class="t"><span>${SCHED_TYPES[tc].ico} ${esc(e["名稱"] || it.rows[0]["項目名稱"])}</span><small>${esc(liveTime(it.t))}</small></div>
+            <div class="g">${esc(e["組別"] || it.rows[0]["組別"] || "")} ${esc(e["性別"] || "")}</div><ol>${top.map(r =>
+              `<li><span class="m">${MEDAL[Number(r["名次"]) - 1] || r["名次"]}</span><span class="n"><b>${esc(r["班級"])}</b> ${esc(r["姓名"] || "")}</span><span class="r">${esc(r["紀錄"] === "" || r["紀錄"] == null ? "" : r["紀錄"])}</span></li>`).join("")}</ol></div>`;
+        }).join("");
+        const rk = (rkD.ranking || []).slice(0, 5);
+        el("liveRk").innerHTML = rk.length ? `<div class="live-rank"><div class="t">🏆 班級積分前五名</div><ol>${rk.map(r =>
+          `<li><span class="m">${MEDAL[r["名次"] - 1] || r["名次"]}</span><span class="c">${esc(r["班級"])}</span><span class="p">${esc(r["總分"])} 分</span></li>`).join("")}</ol></div>` : "";
+        el("liveCard").style.display = "block";
+      } catch (e) { /* 讀不到就維持上次畫面，不影響首頁其他內容 */ }
+    }
+    loadLive();
+    setInterval(function () { if (!document.hidden) loadLive(); }, 30000);
+
     // 下一場比賽倒數（資料＝賽事行事曆）；讀不到就不顯示，不影響公告
     (async function () {
       try { el("nextBox").innerHTML = nextCardHtml(prepSchedule((await apiGet("schedule")).schedule), { link: "schedule.html" }); } catch (e) {}
