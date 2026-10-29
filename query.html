@@ -12,22 +12,18 @@
   <main>
     <section class="card">
       <h2>個人成績總覽</h2>
-      <p class="muted">查「某一位學生」：輸入他的班級座號，列出他報名的每個項目，已公布/尚未公布都會顯示。</p>
+      <p class="muted">查「某一位學生」：<b>班級必填</b>，<b>座號或姓名擇一</b>即可。班級可以直接打 501、607（＝5年1班、6年7班），列出他報名的每個項目，已公布/尚未公布都會顯示。</p>
       <div class="row">
         <div style="flex:1;min-width:120px">
-          <label>年級</label>
-          <select id="p_grade"><option value="">請選擇</option><option>4年級</option><option>5年級</option><option>6年級</option></select>
-        </div>
-        <div style="flex:1;min-width:120px">
-          <label>班級</label>
-          <input id="p_cls" placeholder="4年1班">
+          <label>班級（必填）</label>
+          <input id="p_cls" placeholder="501 或 5年1班">
         </div>
         <div style="flex:1;min-width:100px">
-          <label>座號</label>
+          <label>座號（與姓名擇一）</label>
           <input id="p_seat" inputmode="numeric" placeholder="15">
         </div>
         <div style="flex:1;min-width:120px">
-          <label>姓名</label>
+          <label>姓名（與座號擇一）</label>
           <input id="p_name" placeholder="王小明">
         </div>
         <div><button class="btn" id="p_go" type="button">查詢</button></div>
@@ -151,19 +147,27 @@
       return m ? m[1] + "年級" : "";
     }
     async function personalOverview() {
-      const cls = el("p_cls").value.trim(),
-            seat = el("p_seat").value.trim(), name = el("p_name").value.trim();
-      const grade = el("p_grade").value || gradeFromClass(cls);
+      const rawCls = el("p_cls").value.trim(), seatIn = el("p_seat").value.trim(), name = el("p_name").value.trim();
       const box = el("p_out");
-      if (!cls || !seat) { toast("請至少填班級與座號", "err"); return; }
-      if (!grade) { toast("請選擇年級，或把班級填成「6年1班」這種格式", "err"); return; }
+      if (!rawCls) { toast("請填班級（例如 501 或 5年1班）", "err"); return; }
+      if (!seatIn && !name) { toast("座號或姓名請至少填一項", "err"); return; }
+      const cls = normalizeClassName(rawCls);
+      if (!isStdClassName(cls)) { toast("班級看不懂，請打 501、607 或 5年1班 這種格式", "err"); return; }
+      const grade = gradeFromClass(cls);
       box.innerHTML = '<p class="muted">查詢中…</p>';
       try {
-        const [regData, resData] = await Promise.all([
-          apiGet("student", { grade, cls, seat }),
+        const [listData, resData] = await Promise.all([
+          apiGet("reglist", { grade, cls }),
           apiGet("query"),
         ]);
-        if (!regData.regs.length) { box.innerHTML = '<div class="notice">查無此生的報名紀錄，請確認年級/班級/座號是否正確。</div>'; return; }
+        const seatN = seatIn ? String(normalizeSeat(seatIn)) : "";
+        const mine = listData.regs.filter(function (r) {
+          return cKey(r["班級"]) === cls && (!seatN || String(normalizeSeat(r["座號"])) === seatN) && (!name || String(r["姓名"]).trim() === name);
+        });
+        const seats = Array.from(new Set(mine.map(r => String(normalizeSeat(r["座號"])))));
+        if (seats.length > 1) { box.innerHTML = '<div class="notice">這個班有多位同名的學生，請改填座號。</div>'; return; }
+        const regData = { regs: mine };
+        if (!regData.regs.length) { box.innerHTML = '<div class="notice">查無此生的報名紀錄，請確認班級與座號／姓名是否正確。</div>'; return; }
         // 用報名資料裡的姓名精準過濾，避免把同班同學同項目的成績當成本人的；接力以班級為單位
         const myName = String(regData.regs[0]["姓名"] || "").trim(), myCls = cKey(regData.regs[0]["班級"] || cls);
         const done = {}, byCode = {};
