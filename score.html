@@ -363,7 +363,7 @@
         }
         const val = entries.filter(e => e.res.k === "val"), asc = kind === "time";
         val.forEach(e => { e.rank = 1 + val.filter(o => asc ? o.res.v < e.res.v : o.res.v > e.res.v).length; });
-        const top = val.filter(e => e.rank <= nTop).sort((a, b) => a.rank - b.rank), nos = entries.filter(e => e.res.k === "nos");
+        const top = val.sort((a, b) => a.rank - b.rank), nos = entries.filter(e => e.res.k === "nos");
         items.push({ sheet: nm, code, ev, title: (ev["名稱"] === "跳高" ? "垂直跳（摸高器；原跳高）" : ev["名稱"]) + "（" + ev["組別"] + " " + ev["性別"] + "）", total: entries.length,
           nVal: val.length, nX: entries.filter(e => e.res.k === "x").length, nBlank: entries.filter(e => e.res.k === "blank").length,
           bads: entries.filter(e => e.res.k === "bad"), top, nNos: nos.length,
@@ -392,7 +392,7 @@
         if (it.err) return `<div class="ri-item" style="border:1px solid #f0b8b0;background:#fdecea;border-radius:10px;padding:10px 12px;margin-bottom:10px">工作表「${esc(it.sheet)}」：<b class="rank1">${esc(it.err)}</b>，不會匯入。</div>`;
         const ok = !it.nBad && !it.nBlank && it.nVal > 0, exist = RI_EXISTING[it.code] || 0;
         const issues = it.bads.slice(0, 5).map(e => `<div class="rank1" style="font-size:13px">⚠ ${esc(e.cls)} ${esc(e.name)}：${esc(e.res.msg)}</div>`).join("") + (it.bads.length > 5 ? `<div class="rank1" style="font-size:13px">…還有 ${it.bads.length - 5} 筆</div>` : "");
-        const trs = it.top.map(e => `<tr><td class="${e.rank <= 3 ? "rank" + e.rank : ""}" style="font-weight:800">${e.rank}</td><td>${esc(e.cls)}</td><td>${esc(e.name)}</td><td>${esc(e.res.text)}</td><td class="sc">${CONFIG.scoreTable[e.rank - 1]}</td></tr>`).join("");
+        const trs = it.top.map(e => `<tr><td class="${e.rank <= 3 ? "rank" + e.rank : ""}" style="font-weight:800">${e.rank}</td><td>${esc(e.cls)}</td><td>${esc(e.name)}</td><td>${esc(e.res.text)}</td><td class="sc">${CONFIG.scoreTable[e.rank - 1] || 0}</td></tr>`).join("");
         return `<div class="ri-item" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px">
           <label style="display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" class="ri_chk" data-i="${i}" ${ok ? "checked" : ""} style="width:auto"><b>${esc(it.title)}</b><span class="muted" style="font-size:12px">工作表：${esc(it.sheet)}</span></label>
           <div class="muted" style="font-size:13px;margin:4px 0">共 ${it.total} 位：有成績 <b>${it.nVal}</b>、X（未出賽／犯規）${it.nX}${it.nNos ? `、棄權／請假 ${it.nNos}` : ""}${it.nBlank ? `、<b class="rank1">空白 ${it.nBlank}（還沒填）</b>` : ""}${it.nBad ? `、<b class="rank1">看不懂 ${it.nBad}</b>` : ""}。
@@ -400,7 +400,7 @@
           ${issues}${it.nBlank ? `<div class="rank1" style="font-size:13px">⚠ 空白視為還沒填，不會計名次；確定沒比賽請填 X。</div>` : ""}
           ${it.top.length ? `<div class="table-wrap"><table><thead><tr><th>名次</th><th>班級</th><th>姓名</th><th>紀錄</th><th>得分</th></tr></thead><tbody>${trs}</tbody></table></div>` : '<div class="muted" style="font-size:13px">沒有可計名次的成績。</div>'}</div>`;
       }).join("");
-      box.innerHTML = `<div class="notice">共讀到 <b>${RI_ITEMS.length}</b> 個項目${skipped.length ? `（略過沒有項目代碼的工作表：${skipped.map(esc).join("、")}）` : ""}。只顯示前 ${CONFIG.scoreTable.length} 名（有積分者）；勾選要匯入的項目。</div>${cards}
+      box.innerHTML = `<div class="notice">共讀到 <b>${RI_ITEMS.length}</b> 個項目${skipped.length ? `（略過沒有項目代碼的工作表：${skipped.map(esc).join("、")}）` : ""}。所有有成績的選手都會寫入（前 ${CONFIG.scoreTable.length} 名有積分，其餘得分 0）；勾選要匯入的項目。</div>${cards}
         <div style="margin-top:8px"><button class="btn" id="ri_import" type="button">確認匯入</button> <span id="ri_sum" class="muted"></span></div><div id="ri_result" style="margin-top:10px"></div>`;
       box.querySelectorAll(".ri_chk").forEach(c => c.addEventListener("change", updateRiSum));
       el("ri_import").addEventListener("click", doRiImport); updateRiSum();
