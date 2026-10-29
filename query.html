@@ -37,7 +37,7 @@
 
     <section class="card">
       <h2>依條件查詢名次</h2>
-      <p class="muted">查「某個項目/班級」有哪些人上榜：可篩選年級、項目、班級、姓名，列出所有符合條件、已公布名次的成績。</p>
+      <p class="muted">查「某個項目/班級」的成績：可篩選年級、項目、班級、姓名。項目只要已經公布成績，報名了卻沒有名次的選手會顯示「未達標」（棄權、請假者會標示原因）。</p>
       <div class="row">
         <div style="flex:1;min-width:150px">
           <label>年級</label>
@@ -69,9 +69,20 @@
   <script src="js/api.js?v=20261022d"></script>
   <script src="js/layout.js?v=20261022d"></script>
   <script>
+    let EVENTS = [];
+    // 狀態說明：沒有名次紀錄的選手，在「已公布成績的項目」裡顯示「未達標」；棄權、請假（成績表的紀錄欄寫「棄權」「請假」）照實顯示
+    const NOSHOW = ["棄權", "請假"];
+    const isRelayName = n => /接力/.test(String(n || ""));
+    const cKey = c => normalizeClassName(c);
+    const sKey = (c, n) => cKey(c) + "|" + String(n || "").trim();
+    function specialStatus(r) {   // 回傳「棄權」「請假」或 ""
+      const t = String(r["紀錄"] || "").trim();
+      return NOSHOW.indexOf(t) >= 0 ? t : "";
+    }
     (async function fillEvents() {
       try {
         const data = await apiGet("events");
+        EVENTS = data.events;
         const sel = el("code");
         data.events.forEach(function (e) {
           const o = document.createElement("option");
@@ -84,22 +95,51 @@
     async function run() {
       const out = el("out"); out.innerHTML = '<p class="muted">查詢中…</p>';
       try {
-        const data = await apiGet("query", {
-          grade: el("grade").value, code: el("code").value,
-          cls: el("cls").value.trim(), name: el("name").value.trim(),
+        const fGrade = el("grade").value, fCode = el("code").value,
+              fCls = cKey(el("cls").value.trim()), fName = el("name").value.trim();
+        const [resD, regD, evD] = await Promise.all([apiGet("query"), apiGet("reglist"), EVENTS.length ? { events: EVENTS } : apiGet("events")]);
+        EVENTS = evD.events;
+        const results = resD.results, regs = regD.regs;
+        const pass = r => (!fGrade || String(r["年級"]) === fGrade) && (!fCode || r["項目代碼"] == fCode) &&
+          (!fCls || cKey(r["班級"]) === fCls) && (!fName || String(r["姓名"] || "").indexOf(fName) >= 0);
+        const done = {};   // 已公布成績的項目
+        results.forEach(r => { done[r["項目代碼"]] = true; });
+        const rows = [];
+        results.filter(pass).forEach(function (r) {
+          const sp = specialStatus(r), rk = Number(r["名次"]);
+          rows.push({ code: r["項目代碼"], name: r["項目名稱"], grp: r["組別"], cls: r["班級"], who: r["姓名"], seat: 0,
+            rank: sp || !rk ? 999 : rk, label: sp || (rk ? rk : "—"), rec: sp ? "" : (r["紀錄"] || ""), pts: r["得分"], css: rk && !sp && rk <= 3 ? "rank" + rk : "" });
         });
-        if (!data.results.length) { out.innerHTML = '<div class="notice">查無成績。</div>'; return; }
-        let rows = data.results.map(function (r) {
-          const rk = Number(r["名次"]);
-          const cls = rk <= 3 ? "rank" + rk : "";
-          return `<tr>
-            <td>${esc(r["項目名稱"])}</td><td>${esc(r["組別"])}</td>
-            <td class="${cls}">${rk}</td><td>${esc(r["班級"])}</td>
-            <td>${esc(r["姓名"])}</td><td>${esc(r["得分"])}</td></tr>`;
-        }).join("");
-        out.innerHTML = `<div class="table-wrap"><table>
-          <thead><tr><th>項目</th><th>組別</th><th>名次</th><th>班級</th><th>姓名</th><th>得分</th></tr></thead>
-          <tbody>${rows}</tbody></table></div>`;
+        // 報名了、項目已公布成績、卻沒有名次紀錄的人 → 未達標
+        const has = {}, hasClass = {};
+        results.forEach(r => { has[r["項目代碼"] + "|" + sKey(r["班級"], r["姓名"])] = true; hasClass[r["項目代碼"] + "|" + cKey(r["班級"])] = true; });
+        const relayDone = {};
+        regs.forEach(function (g) {
+          const code = g["項目代碼"]; if (!done[code]) return;
+          const ev = EVENTS.find(e => e["代碼"] == code) || {};
+          if (!pass({ "年級": g["年級"], "項目代碼": code, "班級": g["班級"], "姓名": g["姓名"] })) return;
+          const relay = isRelayName(g["項目名稱"] || ev["名稱"]);
+          if (relay) {   // 接力以班級為單位，一班只列一次
+            const k = code + "|" + cKey(g["班級"]);
+            if (hasClass[k] || relayDone[k]) return; relayDone[k] = true;
+            rows.push({ code, name: g["項目名稱"], grp: ev["組別"] || g["年級"], cls: g["班級"], who: "（全班）", seat: 0, rank: 1000, label: "未達標", rec: "", pts: 0, css: "muted" });
+            return;
+          }
+          if (has[code + "|" + sKey(g["班級"], g["姓名"])]) return;
+          rows.push({ code, name: g["項目名稱"], grp: ev["組別"] || g["年級"], cls: g["班級"], who: g["姓名"], seat: Number(g["座號"]) || 0, rank: 1000, label: "未達標", rec: "", pts: 0, css: "muted" });
+        });
+        if (!rows.length) { out.innerHTML = '<div class="notice">查無成績。</div>'; return; }
+        const ord = c => { const i = EVENTS.findIndex(e => e["代碼"] == c); return i < 0 ? 999 : i; };
+        rows.sort((a, b) => ord(a.code) - ord(b.code) || a.rank - b.rank || normalizeClassName(a.cls).localeCompare(normalizeClassName(b.cls), "zh", { numeric: true }) || a.seat - b.seat);
+        const nOk = rows.filter(r => r.rank < 999).length, nNo = rows.filter(r => r.label === "未達標").length;
+        const body = rows.map(r => `<tr>
+            <td>${esc(r.name)}</td><td>${esc(r.grp)}</td>
+            <td class="${r.css}">${esc(r.label)}</td><td>${esc(r.cls)}</td>
+            <td>${esc(r.who)}</td><td>${esc(r.rec)}</td><td style="text-align:center">${esc(r.pts)}</td></tr>`).join("");
+        out.innerHTML = `<div class="notice">共 ${rows.length} 筆：有名次 ${nOk} 筆、未達標 ${nNo} 筆${rows.length - nOk - nNo ? "、棄權／請假 " + (rows.length - nOk - nNo) + " 筆" : ""}。</div>
+          <div class="table-wrap"><table>
+          <thead><tr><th>項目</th><th>組別</th><th>名次</th><th>班級</th><th>姓名</th><th>紀錄</th><th>得分</th></tr></thead>
+          <tbody>${body}</tbody></table></div>`;
       } catch (e) { out.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
     el("go").addEventListener("click", run);
@@ -121,19 +161,25 @@
       try {
         const [regData, resData] = await Promise.all([
           apiGet("student", { grade, cls, seat }),
-          apiGet("query", { cls, name }),
+          apiGet("query"),
         ]);
         if (!regData.regs.length) { box.innerHTML = '<div class="notice">查無此生的報名紀錄，請確認年級/班級/座號是否正確。</div>'; return; }
-        // 用報名資料裡的姓名精準過濾，避免沒填姓名時把同班同學同項目的成績當成本人的
-        const myName = String(regData.regs[0]["姓名"] || "").trim();
-        const byCode = {};
-        resData.results
-          .filter(function (r) { return !myName || String(r["姓名"]).trim() === myName; })
-          .forEach(function (r) { byCode[r["項目代碼"]] = r; });
+        // 用報名資料裡的姓名精準過濾，避免把同班同學同項目的成績當成本人的；接力以班級為單位
+        const myName = String(regData.regs[0]["姓名"] || "").trim(), myCls = cKey(regData.regs[0]["班級"] || cls);
+        const done = {}, byCode = {};
+        resData.results.forEach(function (r) {
+          done[r["項目代碼"]] = true;
+          if (cKey(r["班級"]) !== myCls) return;
+          if (isRelayName(r["項目名稱"]) || String(r["姓名"]).trim() === myName) byCode[r["項目代碼"]] = r;
+        });
         const rows = regData.regs.map(function (r) {
           const res = byCode[r["項目代碼"]];
-          if (!res) return { 項目: r["項目名稱"], 類別: r["類別"], 狀態: '<span class="muted">尚未公布</span>', 名次: "", 紀錄: "", 得分: "" };
-          const rk = Number(res["名次"]);
+          if (!res) {
+            if (done[r["項目代碼"]]) return { 項目: r["項目名稱"], 類別: r["類別"], 狀態: '<span style="font-weight:700;color:var(--muted)">未達標</span>', 名次: "未達標", 紀錄: "", 得分: 0 };
+            return { 項目: r["項目名稱"], 類別: r["類別"], 狀態: '<span class="muted">尚未公布</span>', 名次: "", 紀錄: "", 得分: "" };
+          }
+          const sp = specialStatus(res), rk = Number(res["名次"]);
+          if (sp) return { 項目: r["項目名稱"], 類別: r["類別"], 狀態: `<span style="font-weight:700;color:var(--muted)">${esc(sp)}</span>`, 名次: sp, 紀錄: "", 得分: 0 };
           const badge = rk <= 3 ? "rank" + rk : "";
           return { 項目: r["項目名稱"], 類別: r["類別"],
             狀態: `<span class="${badge}" style="font-weight:700">第 ${rk} 名</span>`,
@@ -141,7 +187,7 @@
         });
         const doneN = rows.filter(r => r.名次 !== "").length;
         const trs = rows.map(r => `<tr><td>${esc(r.項目)}</td><td>${esc(r.類別)}</td><td>${r.狀態}</td><td>${esc(r.紀錄)}</td><td style="text-align:center">${esc(r.得分)}</td></tr>`).join("");
-        box.innerHTML = `<div class="notice">共報名 ${rows.length} 項，已公布成績 ${doneN} 項。</div>
+        box.innerHTML = `<div class="notice">共報名 ${rows.length} 項，已公布成績 ${doneN} 項（含未達標、棄權、請假）。</div>
           <div class="table-wrap"><table><thead><tr><th>項目</th><th>類別</th><th>狀態</th><th>紀錄</th><th>得分</th></tr></thead>
           <tbody>${trs}</tbody></table></div>`;
       } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
