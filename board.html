@@ -133,7 +133,8 @@
       el("bs").textContent = (ev["組別"] || "") + "　" + (ev["性別"] || "");
       try {
         const data = data0 || await apiGet("query", { code });
-        const rows = data.results.filter(function (r) { return r["項目代碼"] == code; }).sort(function (a, b) { return (a["名次"] || 99) - (b["名次"] || 99); });
+        const TOPN = CONFIG.scoreTable.length;   // 公布頁只顯示有積分的名次（前 6 名）；完整成績到「成績查詢」
+        const rows = data.results.filter(function (r) { var k = Number(r["名次"]); return r["項目代碼"] == code && k >= 1 && k <= TOPN; }).sort(function (a, b) { return (a["名次"] || 99) - (b["名次"] || 99); });
         if (!rows.length) { el("out").innerHTML = '<div class="notice" style="text-align:center;font-size:clamp(15px,2vw,22px)">此項目尚未公布成績</div>'; return; }
         const medal = ["🥇","🥈","🥉"];
         const body = rows.map(function (r) {
