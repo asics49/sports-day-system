@@ -98,7 +98,7 @@
         el("liveSub").textContent = "已公布 " + items.length + " / " + evs.length + " 個項目　更新於 " + liveTime(Date.now()).replace("剛剛", new Date().toTimeString().slice(0, 5));
         el("liveEv").innerHTML = items.slice(0, LIVE_N).map(it => {
           const e = it.e || {}, tc = schedTypeOf(e["名稱"] || it.rows[0]["項目名稱"]);
-          const top = it.rows.filter(r => Number(r["名次"]) <= 3).sort((a, b) => a["名次"] - b["名次"]);
+          const top = it.rows.filter(r => Number(r["名次"]) >= 1 && Number(r["名次"]) <= 3).sort((a, b) => a["名次"] - b["名次"]);
           return `<div class="live-ev t-${tc}"><div class="t"><span>${SCHED_TYPES[tc].ico} ${esc(e["名稱"] || it.rows[0]["項目名稱"])}</span><small>${esc(liveTime(it.t))}</small></div>
             <div class="g">${esc(e["組別"] || it.rows[0]["組別"] || "")} ${esc(e["性別"] || "")}</div><ol>${top.map(r =>
               `<li><span class="m">${MEDAL[Number(r["名次"]) - 1] || r["名次"]}</span><span class="n"><b>${esc(r["班級"])}</b> ${esc(r["姓名"] || "")}</span><span class="r">${esc(r["紀錄"] === "" || r["紀錄"] == null ? "" : r["紀錄"])}</span></li>`).join("")}</ol></div>`;

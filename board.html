@@ -137,14 +137,15 @@
         if (!rows.length) { el("out").innerHTML = '<div class="notice" style="text-align:center;font-size:clamp(15px,2vw,22px)">此項目尚未公布成績</div>'; return; }
         const medal = ["🥇","🥈","🥉"];
         const body = rows.map(function (r) {
-          const rk = Number(r["名次"]);
-          const cls = rk <= 3 ? "top" + rk : "";
-          const m = rk <= 3 ? '<span class="medal">' + medal[rk - 1] + '</span> ' : "";
+          const sp = r["紀錄"] === "棄權" || r["紀錄"] === "請假";
+          const rk = sp ? 0 : Number(r["名次"]);
+          const cls = rk >= 1 && rk <= 3 ? "top" + rk : "";
+          const m = rk >= 1 && rk <= 3 ? '<span class="medal">' + medal[rk - 1] + '</span> ' : "";
           return `<tr class="${cls}">
-            <td class="rk rank${rk<=3?rk:''}">${m}${rk}</td>
+            <td class="rk rank${rk>=1&&rk<=3?rk:''}">${sp ? esc(r["紀錄"]) : m + rk}</td>
             <td>${esc(r["班級"])}</td>
             <td>${esc(r["姓名"])}</td>
-            <td>${esc(r["紀錄"] || "")}</td>
+            <td>${sp ? "" : esc(r["紀錄"] || "")}</td>
             <td style="text-align:center">${esc(r["得分"])}</td></tr>`;
         }).join("");
         el("out").innerHTML = `<div class="table-wrap"><table class="board">
