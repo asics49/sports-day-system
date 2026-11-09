@@ -500,12 +500,18 @@
           <button class="btn ghost" id="finAuto" type="button">依成績重新排名</button>
           <button class="btn red" id="delBtn" type="button">清除此項成績</button>
           <span class="muted" id="finSum"></span></div>
+        <div class="row" style="margin-top:8px;align-items:center">
+          <button class="btn ghost" id="finPrint" type="button">🖨 列印決賽紀錄表（紙本）</button>
+          <button class="btn ghost" id="finXlsx" type="button">⬇ 下載決賽紀錄表 Excel</button>
+          <span class="muted" style="font-size:13px">給記錄員現場填寫；Excel 填完可用下方「紀錄表 Excel 匯入」匯回（選「決賽」）。</span></div>
         <p class="muted" style="font-size:13px;margin:6px 0 0">儲存會覆蓋此項目原有成績。</p>`;
       const body = el("area");
       body.querySelectorAll(".fv, .fs").forEach(x => x.addEventListener(x.tagName === "SELECT" ? "change" : "input", finCalc));
       body.querySelectorAll(".fr").forEach(x => x.addEventListener("input", function () { this.closest("tr").dataset.manual = "1"; finCalc(); }));
       el("finAuto").addEventListener("click", function () { body.querySelectorAll("tr[data-fi]").forEach(tr => delete tr.dataset.manual); finCalc(); });
       el("finSave").addEventListener("click", () => saveFinalList(code));
+      el("finPrint").addEventListener("click", finPrint);
+      el("finXlsx").addEventListener("click", finExcel);
       el("delBtn").addEventListener("click", () => del(code));
       finCalc();
     }
@@ -525,6 +531,71 @@
         tr.querySelector(".fsc").textContent = st ? st : k >= 1 ? (CONFIG.scoreTable[k - 1] || 0) : "";
       });
       el("finSum").innerHTML = `有名次 ${n} ${isTeamEvent(EV_CUR) ? "班" : "人"}` + (bad ? `　<b class="rank1">${bad} 格看不懂的成績（紅框）</b>` : "");
+    }
+    // 決賽紀錄表：名單同上方表格（晉級選手；接力＝班級），成績欄空白給記錄員手寫
+    function finSheetSpec() {
+      const team = isTeamEvent(EV_CUR), kind = riKind(EV_CUR), ev = EV_CUR;
+      const evName = (ev["名稱"] === "跳高" ? "垂直跳（摸高器）" : ev["名稱"]) + " " + ev["組別"] + (ev["性別"] && ev["性別"] !== "混合" ? " " + ev["性別"] + "子組" : "");
+      const list = FIN_LIST.filter(o => !o.extra);
+      let cols;
+      if (kind === "time") cols = team ? ["道次", "班級", "成績（秒）", "名次", "備註"] : ["道次", "班級", "座號", "姓名", "成績（秒）", "名次", "備註"];
+      else if (kind === "vj") cols = ["編號", "班級", "座號", "姓名", "站立摸高（cm）", "第1次摸高", "第2次摸高", "第3次摸高", "最佳摸高", "垂直跳成績", "名次", "備註"];
+      else cols = ["編號", "班級", "座號", "姓名", "第1次", "第2次", "第3次", "最佳成績（公尺）", "名次", "備註"];
+      const rows = list.map((o, i) => cols.map(c => c === "編號" ? i + 1 : c === "班級" ? o.班級 : c === "座號" ? (Number(o.座號) || o.座號 || "") : c === "姓名" ? o.姓名 : ""));
+      return { team, kind, evName, cols, rows, code: ev["代碼"] };
+    }
+    function finPrint() {
+      const sp = finSheetSpec();
+      if (!sp.rows.length) return toast("名單是空的", "err");
+      const extra = 2, blank = sp.cols.map(() => "");
+      const body = sp.rows.concat(Array.from({ length: extra }, () => blank))
+        .map(r => "<tr>" + r.map(c => `<td>${esc(c)}</td>`).join("") + "</tr>").join("");
+      const w = window.open("", "_blank");
+      if (!w) return toast("瀏覽器擋住了彈出視窗，請允許後再按一次", "err");
+      w.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${esc(sp.evName)} 決賽紀錄表</title>
+        <style>
+          @page { size: A4 ${sp.cols.length > 8 ? "landscape" : "portrait"}; margin: 14mm; }
+          body { font-family: "Microsoft JhengHei", "Noto Sans TC", sans-serif; color: #000; margin: 0; padding: 16px; }
+          h1 { font-size: 20px; text-align: center; margin: 0 0 4px; }
+          h2 { font-size: 24px; text-align: center; margin: 0 0 10px; }
+          .meta { display: flex; flex-wrap: wrap; gap: 6px 28px; font-size: 15px; margin-bottom: 10px; }
+          .meta span { white-space: nowrap; }
+          table { width: 100%; border-collapse: collapse; font-size: 16px; }
+          th, td { border: 1px solid #000; padding: 0 6px; height: 40px; text-align: center; }
+          th { background: #eee; height: 34px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .sign { display: flex; justify-content: space-between; margin-top: 24px; font-size: 16px; }
+          .note { font-size: 13px; margin-top: 8px; }
+          @media print { .noprint { display: none; } body { padding: 0; } }
+        </style></head><body>
+        <div class="noprint" style="margin-bottom:12px"><button onclick="print()" style="font-size:16px;padding:6px 16px">🖨 列印</button></div>
+        <h1>${esc(CONFIG.schoolName || "")} ${esc(CONFIG.eventTitle || "")}</h1>
+        <h2>${esc(sp.evName)}　決賽成績紀錄表</h2>
+        <div class="meta"><span>項目代碼：${esc(sp.code)}</span><span>參賽：${sp.rows.length} ${sp.team ? "班" : "人"}</span>
+          <span>日期：______________</span><span>時間：__________</span><span>地點：______________</span></div>
+        <table><thead><tr>${sp.cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>
+        <div class="note">${sp.kind === "time" ? "成績記到 0.01 秒；" : sp.kind === "vj" ? "垂直跳成績＝最佳摸高－站立摸高（公分）；" : "成績記到公分（例：3.25 公尺）；"}未出賽或犯規寫 X，棄權／請假請在備註註明。</div>
+        <div class="sign"><span>記錄員：________________</span><span>裁判：________________</span><span>裁判長：________________</span></div>
+        </body></html>`);
+      w.document.close();
+      setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 300);
+    }
+    function finExcel() {
+      const sp = finSheetSpec();
+      if (!sp.rows.length) return toast("名單是空的", "err");
+      // 格式同管理頁「成績紀錄表 Excel 版」，可直接用「紀錄表 Excel 匯入」匯回
+      const cols = sp.kind === "time" ? sp.cols.filter(c => c !== "名次")
+        : sp.kind === "vj" ? ["編號", "班級", "座號", "姓名", "站立摸高（cm）", "第1次摸高", "第2次摸高", "第3次摸高", "最佳摸高（選填）", "備註"]
+        : ["編號", "班級", "座號", "姓名", "第1次", "第2次", "第3次", "最佳成績（選填）", "備註"];
+      const idx = sp.cols.reduce((m, c, i) => (m[c.replace("（選填）", "")] = i, m), {});
+      const rows = sp.rows.map(r => cols.map(c => { const i = idx[c.replace("（選填）", "")]; return i >= 0 && ["編號", "班級", "座號", "姓名"].indexOf(c) >= 0 ? r[i] : null; }));
+      const note = sp.kind === "vj" ? "填寫說明：摸高填公分數字；未出賽或犯規填大寫 X，棄權或請假填文字。垂直跳成績由系統計算。請勿修改第 2 列與標題列。"
+        : "填寫說明：成績直接填數字；未出賽或犯規填大寫 X，棄權或請假填文字「棄權」「請假」；不用填名次（匯入時由系統計算）。請勿修改第 2 列與標題列。";
+      const ws = XLSX.utils.aoa_to_sheet([[sp.evName + " 決賽成績紀錄表"], ["項目代碼", sp.code], [note], [], cols].concat(rows));
+      ws["!cols"] = cols.map(c => ({ wch: c === "姓名" || c === "班級" ? 12 : c === "備註" ? 18 : c.length > 4 ? 14 : 8 }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, ("決賽_" + (EV_CUR["名稱"] === "跳高" ? "垂直跳" : EV_CUR["名稱"]) + "_" + String(EV_CUR["組別"]).replace("年級", "") + (EV_CUR["性別"] === "混合" ? "" : EV_CUR["性別"] || "")).slice(0, 31));
+      XLSX.writeFile(wb, "決賽紀錄表_" + sp.code + "_" + new Date().getFullYear() + String(new Date().getMonth() + 1).padStart(2, "0") + String(new Date().getDate()).padStart(2, "0") + ".xlsx");
+      toast("已下載 Excel", "ok");
     }
     async function saveFinalList(code) {
       const asc = riKind(EV_CUR) === "time", unit = asc ? "秒" : riKind(EV_CUR) === "vj" ? "公分" : "公尺";
