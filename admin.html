@@ -279,11 +279,13 @@
       <section class="card">
         <h2>決賽晉級名單</h2>
         <p class="muted">彙整有預賽項目的<b>晉級決賽名單</b>（資料來自成績輸入頁的「預賽」），可產生公告文字複製到 LINE、發布成網站公告，或匯出 Excel。公告文字只列班級與姓名，<b>不含預賽成績</b>。</p>
-        <div class="row" style="align-items:end">
-          <div style="min-width:140px"><label>年級</label><select id="q_grade"><option value="">全部年級</option><option>1年級</option><option>2年級</option><option>4年級</option><option>5年級</option><option>6年級</option></select></div>
-          <div style="min-width:220px"><label>項目</label><select id="q_event"><option value="">全部有預賽的項目</option></select></div>
-          <div><button class="btn" id="q_run" type="button">載入晉級名單</button></div>
-        </div>
+        <label>年級（可複選，都不勾＝全部年級）</label>
+        <div id="q_grades" style="display:flex;flex-wrap:wrap;gap:6px 16px"><label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="q_g" value="1年級" style="width:auto">1年級</label><label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="q_g" value="2年級" style="width:auto">2年級</label><label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="q_g" value="4年級" style="width:auto">4年級</label><label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="q_g" value="5年級" style="width:auto">5年級</label><label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="q_g" value="6年級" style="width:auto">6年級</label></div>
+        <label style="margin-top:10px">項目（可複選）
+          <a href="javascript:void(0)" id="q_all" style="font-weight:400;margin-left:10px">全選</a>
+          <a href="javascript:void(0)" id="q_none" style="font-weight:400;margin-left:8px">全不選</a></label>
+        <div id="q_events" style="display:flex;flex-wrap:wrap;gap:6px 16px;max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px 10px"></div>
+        <div style="margin-top:10px"><button class="btn" id="q_run" type="button">載入晉級名單</button></div>
         <label style="display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" id="q_showRec" style="width:auto"> 下方表格與匯出的 Excel 顯示預賽名次與成績（內部參考用，公告文字不會包含）</label>
         <div id="q_result" style="margin-top:12px"></div>
         <div id="q_msgBox" style="display:none;margin-top:12px">
@@ -898,22 +900,26 @@
     let Q_GROUPS = [];   // [{ev, title, rows:[{班級,座號,姓名,預賽名次,預賽成績}]}]
     const qHasPre = e => prelimQuota(e) > 0 || String(e["預賽"] || "").trim() === "是";
     const qTitle = e => e["名稱"] + " " + e["組別"] + (e["性別"] && e["性別"] !== "混合" ? " " + e["性別"] : "");
+    const qGrades = () => Array.from(document.querySelectorAll(".q_g:checked")).map(c => c.value);
+    const qCodes = () => Array.from(document.querySelectorAll(".q_e:checked")).map(c => c.value);
+    // 依勾選的年級列出項目；原本勾過的保持，新出現的項目預設勾選
     function qFillEvents() {
-      const g = el("q_grade").value, cur = el("q_event").value;
-      el("q_event").innerHTML = '<option value="">全部有預賽的項目</option>' + EVENTS.filter(e => qHasPre(e) && (!g || e["組別"] === g))
-        .map(e => `<option value="${esc(e["代碼"])}">${esc(qTitle(e))}</option>`).join("");
-      if (cur) el("q_event").value = cur;
+      const gs = qGrades(), prev = {};
+      document.querySelectorAll(".q_e").forEach(c => { prev[c.value] = c.checked; });
+      el("q_events").innerHTML = EVENTS.filter(e => qHasPre(e) && (!gs.length || gs.indexOf(e["組別"]) >= 0))
+        .map(e => `<label style="display:flex;align-items:center;gap:6px;margin:0;white-space:nowrap"><input type="checkbox" class="q_e" value="${esc(e["代碼"])}" ${prev[e["代碼"]] === false ? "" : "checked"} style="width:auto">${esc(qTitle(e))}</label>`).join("") || '<span class="muted">沒有有預賽的項目</span>';
     }
     async function qRun() {
       const b = el("q_run"); setBusy(b, true, "載入中…");
       el("q_result").innerHTML = '<p class="muted">讀取預賽資料中…</p>';
       try {
         if (!EVENTS.length) await loadEvents();
-        if (el("q_event").options.length <= 1) qFillEvents();
+        if (!document.querySelector(".q_e")) qFillEvents();
         const [pd, rd] = await Promise.all([apiGet("prelim", { token: AUTH.token }), apiGet("reglist")]);
         const seat = {}; rd.regs.forEach(r => { seat[r["項目代碼"] + "|" + normalizeClassName(r["班級"]) + "|" + String(r["姓名"]).trim()] = r["座號"]; });
-        const g = el("q_grade").value, code = el("q_event").value;
-        const evs = EVENTS.filter(e => qHasPre(e) && (!g || e["組別"] === g) && (!code || e["代碼"] === code));
+        const codes = qCodes();
+        if (!codes.length) { el("q_result").innerHTML = '<div class="notice">請至少勾選一個項目。</div>'; el("q_msgBox").style.display = "none"; return; }
+        const evs = EVENTS.filter(e => codes.indexOf(e["代碼"]) >= 0);
         Q_GROUPS = evs.map(function (e) {
           const team = isTeamEvent(e);
           const rows = (pd.rows || []).filter(r => r["項目代碼"] === e["代碼"] && String(r["晉級"]).trim() === "是").map(r => ({
@@ -986,7 +992,9 @@
       XLSX.writeFile(wb, "決賽晉級名單_" + todayLocal().replace(/-/g, "") + ".xlsx");
       toast("已匯出 Excel", "ok");
     }
-    el("q_grade").addEventListener("change", qFillEvents);
+    el("q_grades").addEventListener("change", qFillEvents);
+    el("q_all").addEventListener("click", () => document.querySelectorAll(".q_e").forEach(c => { c.checked = true; }));
+    el("q_none").addEventListener("click", () => document.querySelectorAll(".q_e").forEach(c => { c.checked = false; }));
     el("q_run").addEventListener("click", qRun);
     el("q_showRec").addEventListener("change", () => { if (Q_GROUPS.length) qRender(true); });
     el("q_msg").addEventListener("input", qLineLink);
