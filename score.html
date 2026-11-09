@@ -266,7 +266,8 @@
       renderOverview();
       if (STAGE === "prelim") renderPrelim(code);
       else {
-        REG = quals.length ? REG_ALL.filter(r => quals.some(q => pk(q) === pk(r))) : REG_ALL;
+        // 決賽名單＝預賽晉級者（不在報名資料裡的晉級者也要列入，例如代跑或姓名寫法不同；座號從報名資料補）
+        REG = quals.length ? quals.map(q => { const r = REG_ALL.find(x => pk(x) === pk(q)); return r || { 年級: q["年級"] || EV_CUR["組別"] || "", 班級: q["班級"], 座號: q["座號"] || "", 姓名: q["姓名"] || "" }; }) : REG_ALL;
         if (FIN_MODE === "list") renderFinalList(code); else renderRows(code, RES_CUR);
       }
     }
