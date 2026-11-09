@@ -6,7 +6,7 @@
   <title>成績查詢 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261022d">
+  <link rel="stylesheet" href="css/style.css?v=20261109a">
 </head>
 <body data-page="query">
   <main>
@@ -61,9 +61,9 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261022d"></script>
-  <script src="js/api.js?v=20261022d"></script>
-  <script src="js/layout.js?v=20261022d"></script>
+  <script src="js/config.js?v=20261109a"></script>
+  <script src="js/api.js?v=20261109a"></script>
+  <script src="js/layout.js?v=20261109a"></script>
   <script>
     let EVENTS = [];
     // 狀態說明：沒有名次紀錄的選手，在「已公布成績的項目」裡顯示「未達標」；棄權、請假（成績表的紀錄欄寫「棄權」「請假」）照實顯示
@@ -71,6 +71,12 @@
     const isRelayName = n => /接力/.test(String(n || ""));
     const cKey = c => normalizeClassName(c);
     const sKey = (c, n) => cKey(c) + "|" + String(n || "").trim();
+    // 預賽晉級決賽名單（公開 API 只回晉級者）：{ 項目代碼: Set(班級|姓名) }
+    function qualMap(rows) {
+      const m = {};
+      (rows || []).forEach(r => { (m[r["項目代碼"]] || (m[r["項目代碼"]] = new Set())).add(sKey(r["班級"], r["姓名"])); });
+      return m;
+    }
     function specialStatus(r) {   // 回傳「棄權」「請假」或 ""
       const t = String(r["紀錄"] || "").trim();
       return NOSHOW.indexOf(t) >= 0 ? t : "";
@@ -93,7 +99,8 @@
       try {
         const fGrade = el("grade").value, fCode = el("code").value,
               fCls = cKey(el("cls").value.trim()), fName = el("name").value.trim();
-        const [resD, regD, evD] = await Promise.all([apiGet("query"), apiGet("reglist"), EVENTS.length ? { events: EVENTS } : apiGet("events")]);
+        const [resD, regD, evD, preD] = await Promise.all([apiGet("query"), apiGet("reglist"), EVENTS.length ? { events: EVENTS } : apiGet("events"), apiGet("prelim").catch(() => ({ rows: [] }))]);
+        const qual = qualMap(preD.rows);
         EVENTS = evD.events;
         const results = resD.results, regs = regD.regs;
         const pass = r => (!fGrade || String(r["年級"]) === fGrade) && (!fCode || r["項目代碼"] == fCode) &&
@@ -111,28 +118,38 @@
         results.forEach(r => { has[r["項目代碼"] + "|" + sKey(r["班級"], r["姓名"])] = true; hasClass[r["項目代碼"] + "|" + cKey(r["班級"])] = true; });
         const relayDone = {};
         regs.forEach(function (g) {
-          const code = g["項目代碼"]; if (!done[code]) return;
+          const code = g["項目代碼"]; if (!done[code] && !qual[code]) return;
           const ev = EVENTS.find(e => e["代碼"] == code) || {};
           if (!pass({ "年級": g["年級"], "項目代碼": code, "班級": g["班級"], "姓名": g["姓名"] })) return;
           const relay = isRelayName(g["項目名稱"] || ev["名稱"]);
           if (relay) {   // 接力以班級為單位，一班只列一次
+            if (!done[code]) return;
             const k = code + "|" + cKey(g["班級"]);
             if (hasClass[k] || relayDone[k]) return; relayDone[k] = true;
             rows.push({ code, name: g["項目名稱"], grp: ev["組別"] || g["年級"], cls: g["班級"], who: "（全班）", seat: 0, rank: 1000, label: "未達標", rec: "", pts: 0, css: "muted" });
             return;
           }
-          if (has[code + "|" + sKey(g["班級"], g["姓名"])]) return;
-          rows.push({ code, name: g["項目名稱"], grp: ev["組別"] || g["年級"], cls: g["班級"], who: g["姓名"], seat: Number(g["座號"]) || 0, rank: 1000, label: "未達標", rec: "", pts: 0, css: "muted" });
+          const key = sKey(g["班級"], g["姓名"]);
+          if (has[code + "|" + key]) return;
+          // 有預賽的項目：晉級決賽（決賽還沒公布）／預賽未晉級／（決賽公布後）晉級卻沒有名次＝未達標
+          let label = "未達標", css = "muted";
+          if (qual[code]) {
+            const isQ = qual[code].has(key);
+            if (!isQ) label = "預賽未晉級";
+            else if (!done[code]) { label = "晉級決賽"; css = "rank2"; }
+          }
+          rows.push({ code, name: g["項目名稱"], grp: ev["組別"] || g["年級"], cls: g["班級"], who: g["姓名"], seat: Number(g["座號"]) || 0, rank: 1000, label, rec: "", pts: label === "晉級決賽" ? "" : 0, css });
         });
         if (!rows.length) { out.innerHTML = '<div class="notice">查無成績。</div>'; return; }
         const ord = c => { const i = EVENTS.findIndex(e => e["代碼"] == c); return i < 0 ? 999 : i; };
         rows.sort((a, b) => ord(a.code) - ord(b.code) || a.rank - b.rank || normalizeClassName(a.cls).localeCompare(normalizeClassName(b.cls), "zh", { numeric: true }) || a.seat - b.seat);
-        const nOk = rows.filter(r => r.rank < 999).length, nNo = rows.filter(r => r.label === "未達標").length;
+        const nOk = rows.filter(r => r.rank < 999).length, nNo = rows.filter(r => r.label === "未達標").length,
+              nPre = rows.filter(r => r.label === "晉級決賽" || r.label === "預賽未晉級").length;
         const body = rows.map(r => `<tr>
             <td>${esc(r.name)}</td><td>${esc(r.grp)}</td>
             <td class="${r.css}">${esc(r.label)}</td><td>${esc(r.cls)}</td>
             <td>${esc(r.who)}</td><td>${esc(r.rec)}</td><td style="text-align:center">${esc(r.pts)}</td></tr>`).join("");
-        out.innerHTML = `<div class="notice">共 ${rows.length} 筆：有名次 ${nOk} 筆、未達標 ${nNo} 筆${rows.length - nOk - nNo ? "、棄權／請假 " + (rows.length - nOk - nNo) + " 筆" : ""}。</div>
+        out.innerHTML = `<div class="notice">共 ${rows.length} 筆：有名次 ${nOk} 筆、未達標 ${nNo} 筆${nPre ? "、預賽晉級／未晉級 " + nPre + " 筆" : ""}${rows.length - nOk - nNo - nPre ? "、棄權／請假 " + (rows.length - nOk - nNo - nPre) + " 筆" : ""}。</div>
           <div class="table-wrap"><table>
           <thead><tr><th>項目</th><th>組別</th><th>名次</th><th>班級</th><th>姓名</th><th>紀錄</th><th>得分</th></tr></thead>
           <tbody>${body}</tbody></table></div>`;
@@ -156,10 +173,12 @@
       const grade = gradeFromClass(cls);
       box.innerHTML = '<p class="muted">查詢中…</p>';
       try {
-        const [listData, resData] = await Promise.all([
+        const [listData, resData, preD] = await Promise.all([
           apiGet("reglist", { grade, cls }),
           apiGet("query"),
+          apiGet("prelim").catch(() => ({ rows: [] })),
         ]);
+        const qual = qualMap(preD.rows);
         const seatN = seatIn ? String(normalizeSeat(seatIn)) : "";
         const mine = listData.regs.filter(function (r) {
           return cKey(r["班級"]) === cls && (!seatN || String(normalizeSeat(r["座號"])) === seatN) && (!name || String(r["姓名"]).trim() === name);
@@ -179,6 +198,12 @@
         const rows = regData.regs.map(function (r) {
           const res = byCode[r["項目代碼"]];
           if (!res) {
+            const qs = qual[r["項目代碼"]];
+            if (qs && !isRelayName(r["項目名稱"])) {   // 有預賽的項目
+              const isQ = qs.has(sKey(myCls, myName));
+              if (!isQ) return { 項目: r["項目名稱"], 類別: r["類別"], 狀態: '<span style="font-weight:700;color:var(--muted)">預賽未晉級</span>', 名次: "預賽未晉級", 紀錄: "", 得分: 0 };
+              if (!done[r["項目代碼"]]) return { 項目: r["項目名稱"], 類別: r["類別"], 狀態: '<span class="rank2" style="font-weight:700">🏁 晉級決賽</span>', 名次: "晉級", 紀錄: "", 得分: "" };
+            }
             if (done[r["項目代碼"]]) return { 項目: r["項目名稱"], 類別: r["類別"], 狀態: '<span style="font-weight:700;color:var(--muted)">未達標</span>', 名次: "未達標", 紀錄: "", 得分: 0 };
             return { 項目: r["項目名稱"], 類別: r["類別"], 狀態: '<span class="muted">尚未公布</span>', 名次: "", 紀錄: "", 得分: "" };
           }

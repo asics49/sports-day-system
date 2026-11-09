@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/banner-small.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261022d">
+  <link rel="stylesheet" href="css/style.css?v=20261109a">
   <style>
     /* 首頁即時成績 */
     .live-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -21,6 +21,10 @@
     .live-ev .t small { font-weight: 400; color: var(--muted); font-size: 12px; }
     .live-ev .g { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
     .live-ev ol { list-style: none; margin: 0; padding: 0; }
+    .live-ev.pre { background: #f6f9ff; }
+    .live-pre-tag { display: inline-block; font-size: 12px; font-weight: 700; color: #2b5fb4; background: #e3edff; border-radius: 999px; padding: 1px 8px; margin-left: 4px; }
+    .live-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; }
+    .live-chips span { font-size: 13px; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 2px 7px; }
     .live-ev li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; border-top: 1px dashed var(--line); font-size: 14px; }
     .live-ev li:first-child { border-top: none; }
     .live-ev .m { flex: 0 0 22px; text-align: center; }
@@ -70,10 +74,10 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261022d"></script>
-  <script src="js/api.js?v=20261022d"></script>
-  <script src="js/layout.js?v=20261022d"></script>
-  <script src="js/sched.js?v=20261022d"></script>
+  <script src="js/config.js?v=20261109a"></script>
+  <script src="js/api.js?v=20261109a"></script>
+  <script src="js/layout.js?v=20261109a"></script>
+  <script src="js/sched.js?v=20261109a"></script>
   <script>
     // 即時成績：最近公布的項目（前三名）＋班級積分前五名；每 30 秒自動更新（分頁在背景時暫停）
     const LIVE_N = 6, MEDAL = ["🥇", "🥈", "🥉"];
@@ -86,18 +90,30 @@
     }
     async function loadLive() {
       try {
-        const [evD, qD, rkD] = await Promise.all([apiGet("events"), apiGet("query"), apiGet("ranking")]);
-        const results = qD.results || [];
-        if (!results.length) { el("liveCard").style.display = "none"; return; }
+        const [evD, qD, rkD, pD] = await Promise.all([apiGet("events"), apiGet("query"), apiGet("ranking"), apiGet("prelim").catch(() => ({ rows: [] }))]);
+        const results = qD.results || [], quals = pD.rows || [];
+        if (!results.length && !quals.length) { el("liveCard").style.display = "none"; return; }
         const evs = evD.events.filter(e => !isNoRegEvent(e)), idx = {};
         evD.events.forEach((e, i) => { idx[e["代碼"]] = { e, i }; });
         const by = {};
         results.forEach(r => (by[r["項目代碼"]] || (by[r["項目代碼"]] = [])).push(r));
         const items = Object.keys(by).map(code => ({ code, rows: by[code], t: Math.max(...by[code].map(r => new Date(r["時間"]).getTime() || 0)), i: idx[code] ? idx[code].i : 999, e: idx[code] ? idx[code].e : null }))
-          .sort((a, b) => b.t - a.t || a.i - b.i);
-        el("liveSub").textContent = "已公布 " + items.length + " / " + evs.length + " 個項目　更新於 " + liveTime(Date.now()).replace("剛剛", new Date().toTimeString().slice(0, 5));
+          ;
+        // 預賽已完成、決賽還沒公布的項目：只顯示晉級決賽名單（不公布預賽成績）
+        const qby = {};
+        quals.forEach(r => (qby[r["項目代碼"]] || (qby[r["項目代碼"]] = [])).push(r));
+        const nFinal = items.length;
+        Object.keys(qby).filter(code => !by[code]).forEach(code => items.push({ code, pre: true, rows: qby[code], t: Math.max(...qby[code].map(r => new Date(r["時間"]).getTime() || 0)), i: idx[code] ? idx[code].i : 999, e: idx[code] ? idx[code].e : null }));
+        items.sort((a, b) => b.t - a.t || a.i - b.i);
+        el("liveSub").textContent = "已公布 " + nFinal + " / " + evs.length + " 個項目" + (items.length > nFinal ? "（另有 " + (items.length - nFinal) + " 項預賽完成）" : "") + "　更新於 " + liveTime(Date.now()).replace("剛剛", new Date().toTimeString().slice(0, 5));
         el("liveEv").innerHTML = items.slice(0, LIVE_N).map(it => {
           const e = it.e || {}, tc = schedTypeOf(e["名稱"] || it.rows[0]["項目名稱"]);
+          if (it.pre) {
+            const q = it.rows.slice().sort((a, b) => normalizeClassName(a["班級"]).localeCompare(normalizeClassName(b["班級"]), "zh", { numeric: true }));
+            return `<div class="live-ev pre t-${tc}"><div class="t"><span>${SCHED_TYPES[tc].ico} ${esc(e["名稱"] || it.rows[0]["項目名稱"])}<span class="live-pre-tag">預賽完成</span></span><small>${esc(liveTime(it.t))}</small></div>
+              <div class="g">${esc(e["組別"] || it.rows[0]["組別"] || "")} ${esc(e["性別"] || "")}　晉級決賽 ${q.length} 人</div>
+              <div class="live-chips">${q.map(r => `<span>${esc(r["班級"])} ${esc(r["姓名"] || "")}</span>`).join("")}</div></div>`;
+          }
           const top = it.rows.filter(r => Number(r["名次"]) >= 1 && Number(r["名次"]) <= 3).sort((a, b) => a["名次"] - b["名次"]);
           return `<div class="live-ev t-${tc}"><div class="t"><span>${SCHED_TYPES[tc].ico} ${esc(e["名稱"] || it.rows[0]["項目名稱"])}</span><small>${esc(liveTime(it.t))}</small></div>
             <div class="g">${esc(e["組別"] || it.rows[0]["組別"] || "")} ${esc(e["性別"] || "")}</div><ol>${top.map(r =>

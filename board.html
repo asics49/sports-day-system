@@ -6,7 +6,7 @@
   <title>即時成績公布 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261022d">
+  <link rel="stylesheet" href="css/style.css?v=20261109a">
   <style>
     .board-bar { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
     .board-bar > div { flex:1; min-width:150px; }
@@ -66,11 +66,11 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261022d"></script>
-  <script src="js/api.js?v=20261022d"></script>
-  <script src="js/layout.js?v=20261022d"></script>
+  <script src="js/config.js?v=20261109a"></script>
+  <script src="js/api.js?v=20261109a"></script>
+  <script src="js/layout.js?v=20261109a"></script>
   <script>
-    let EVENTS = [], timer = null, cd = 15, PICKED = false;   // PICKED＝使用者手動選過項目；沒選就自動顯示最近公布的項目
+    let EVENTS = [], QUALS = [], timer = null, cd = 15, PICKED = false;   // QUALS＝預賽晉級決賽名單（不含預賽成績）   // PICKED＝使用者手動選過項目；沒選就自動顯示最近公布的項目
 
     (async function fillEvents() {
       try {
@@ -100,28 +100,31 @@
       const grade = el("grade").value, ok = {};
       EVENTS.forEach(function (e) { if (!grade || e["組別"] == grade || e["組別"] == "全校" || String(e["組別"]).indexOf(grade) >= 0) ok[e["代碼"]] = true; });
       const last = {};
-      results.forEach(function (r) { const t = new Date(r["時間"]).getTime() || 0, c = r["項目代碼"]; if (ok[c] && !(last[c] >= t)) last[c] = t; });
+      results.concat(QUALS).forEach(function (r) { const t = new Date(r["時間"]).getTime() || 0, c = r["項目代碼"]; if (ok[c] && !(last[c] >= t)) last[c] = t; });
       const codes = Object.keys(last).sort(function (a, b) { return last[b] - last[a]; });
       return codes[0] || "";
     }
 
     // 已完賽（有成績）的項目，依最近公布時間排序，點選＝切換到該項目
     function renderDone(results) {
-      const grade = el("grade").value, last = {};
-      results.forEach(function (r) { const t = new Date(r["時間"]).getTime() || 0, c = r["項目代碼"]; if (!(last[c] >= t)) last[c] = t; });
+      const grade = el("grade").value, last = {}, hasFinal = {};
+      results.forEach(function (r) { hasFinal[r["項目代碼"]] = true; });
+      results.concat(QUALS).forEach(function (r) { const t = new Date(r["時間"]).getTime() || 0, c = r["項目代碼"]; if (!(last[c] >= t)) last[c] = t; });
       const list = EVENTS.filter(function (e) {
         return last[e["代碼"]] != null && (!grade || e["組別"] == grade || e["組別"] == "全校" || String(e["組別"]).indexOf(grade) >= 0);
       }).sort(function (a, b) { return last[b["代碼"]] - last[a["代碼"]]; });
       el("doneBox").style.display = list.length ? "" : "none";
       const cur = el("code").value;
       el("doneSel").innerHTML = '<option value="">請選擇已完賽項目（共 ' + list.length + ' 項）</option>' + list.map(function (e) {
-        return `<option value="${esc(e["代碼"])}"${e["代碼"] == cur ? " selected" : ""}>${esc(e["名稱"])} ${esc(e["組別"])}${e["性別"] && e["性別"] !== "混合" ? " " + esc(e["性別"]) : ""}</option>`;
+        return `<option value="${esc(e["代碼"])}"${e["代碼"] == cur ? " selected" : ""}>${esc(e["名稱"])} ${esc(e["組別"])}${e["性別"] && e["性別"] !== "混合" ? " " + esc(e["性別"]) : ""}${hasFinal[e["代碼"]] ? "" : "（預賽晉級名單）"}</option>`;
       }).join("");
     }
 
     async function load() {
       let data0 = null;
       try {
+        const pr = await apiGet("prelim").catch(function () { return { rows: [] }; });
+        QUALS = pr.rows || [];
         data0 = await apiGet("query");
         if (!PICKED) { const c = latestCode(data0.results || []); if (c) el("code").value = c; }
         renderDone(data0.results || []);
@@ -135,7 +138,18 @@
         const data = data0 || await apiGet("query", { code });
         const TOPN = CONFIG.scoreTable.length;   // 公布頁只顯示有積分的名次（前 6 名）；完整成績到「成績查詢」
         const rows = data.results.filter(function (r) { var k = Number(r["名次"]); return r["項目代碼"] == code && k >= 1 && k <= TOPN; }).sort(function (a, b) { return (a["名次"] || 99) - (b["名次"] || 99); });
-        if (!rows.length) { el("out").innerHTML = '<div class="notice" style="text-align:center;font-size:clamp(15px,2vw,22px)">此項目尚未公布成績</div>'; return; }
+        if (!rows.length) {
+          const q = QUALS.filter(function (r) { return r["項目代碼"] == code; });
+          if (q.length) {   // 預賽已完成、決賽還沒公布：只公布晉級名單，不公布預賽成績
+            q.sort(function (a, b) { return normalizeClassName(a["班級"]).localeCompare(normalizeClassName(b["班級"]), "zh", { numeric: true }); });
+            el("bs").textContent = (ev["組別"] || "") + "　" + (ev["性別"] || "") + "　預賽完成";
+            el("out").innerHTML = `<div class="notice" style="text-align:center;font-size:clamp(15px,2vw,22px)">🏁 預賽已完成，<b>${q.length}</b> 人晉級決賽（決賽成績尚未公布）</div>
+              <div class="table-wrap"><table class="board"><thead><tr><th class="rk">晉級</th><th>班級</th><th>姓名</th></tr></thead>
+              <tbody>${q.map(function (r) { return `<tr><td class="rk">✅</td><td>${esc(r["班級"])}</td><td>${esc(r["姓名"])}</td></tr>`; }).join("")}</tbody></table></div>`;
+            return;
+          }
+          el("out").innerHTML = '<div class="notice" style="text-align:center;font-size:clamp(15px,2vw,22px)">此項目尚未公布成績</div>'; return;
+        }
         const medal = ["🥇","🥈","🥉"];
         const body = rows.map(function (r) {
           const sp = r["紀錄"] === "棄權" || r["紀錄"] === "請假";
