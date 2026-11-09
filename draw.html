@@ -13,6 +13,7 @@
     .draw-grid th { background: #fff4d6; }
     .draw-grid td.has { font-weight: 800; background: #fffdf5; }
     .draw-grid td.empty { color: #bbb; }
+    .draw-grid td.off { background: repeating-linear-gradient(45deg, #f3f3f3, #f3f3f3 6px, #e9e9e9 6px, #e9e9e9 12px); color: #999; font-size: 14px; }
     .draw-big { text-align: center; padding: 22px 10px; border: 2px dashed var(--gold-d); border-radius: 14px; background: #fffaf0; margin-top: 14px; }
     .draw-big .n { font-size: clamp(30px, 6vw, 56px); font-weight: 900; color: var(--gold-d); letter-spacing: 2px; }
     .draw-big .t { color: var(--muted); margin-top: 4px; }
@@ -55,19 +56,25 @@
   <script src="js/layout.js?v=20261109e"></script>
   <script>
     const AUTH_KEY = "yc_auth", COLORS = ["藍", "綠", "黃", "紅", "橘", "白"];
-    let AUTH = null, INFO = { classCount: {}, lanes: 4 }, ROWS = [], BUSY = false;
+    let AUTH = null, INFO = { classCount: {}, lanes: 4, layout: {} }, ROWS = [], BUSY = false;
     try { AUTH = JSON.parse(localStorage.getItem(AUTH_KEY)); } catch (e) { AUTH = null; }
     if (isStaleAuth(AUTH)) AUTH = null;
 
     const grade = () => el("grade").value;
     const nClass = () => (INFO.classCount || {})[grade()] || 0;
+    // 每組用幾道（只用第 1～k 道）；後端有給就用後端的，否則平均分配、前面的組多一班（10 班 → 4,3,3）
+    const layoutOf = () => {
+      const L = (INFO.layout || {})[grade()]; if (L && L.length) return L;
+      const n = nClass(), groups = Math.ceil(n / INFO.lanes);
+      return Array.from({ length: groups }, (_, g) => Math.floor(n / groups) + (g < n % groups ? 1 : 0));
+    };
     const clsName = i => grade().charAt(0) + "年" + i + "班";
     const drawnMap = () => { const m = {}; ROWS.filter(r => r["年級"] === grade()).forEach(r => { m[normalizeClassName(r["班級"])] = r; }); return m; };
 
     async function load() {
       try {
         const d = await apiGet("draw");
-        INFO = { classCount: d.classCount || {}, lanes: d.lanes || 4 }; ROWS = d.rows || [];
+        INFO = { classCount: d.classCount || {}, lanes: d.lanes || 4, layout: d.layout || {} }; ROWS = d.rows || [];
         const sel = el("grade"), cur = sel.value;
         if (!sel.options.length) sel.innerHTML = Object.keys(INFO.classCount).map(g => `<option>${esc(g)}</option>`).join("");
         if (cur) sel.value = cur;
@@ -76,14 +83,14 @@
     }
 
     function render() {
-      const g = grade(), n = nClass(), lanes = INFO.lanes, groups = Math.ceil(n / lanes), dm = drawnMap();
+      const g = grade(), n = nClass(), lanes = INFO.lanes, layout = layoutOf(), groups = layout.length, dm = drawnMap();
       if (!g) { el("board").innerHTML = '<div class="notice">目前沒有開放線上抽籤的年級。</div>'; return; }
       const cell = {}; Object.keys(dm).forEach(c => { cell[dm[c]["組"] + "-" + dm[c]["道次"]] = c; });
       let html = '<table class="draw-grid"><thead><tr><th>組別＼道次</th>' + Array.from({ length: lanes }, (_, i) => `<th>${i + 1} 道（${COLORS[i]}）</th>`).join("") + "</tr></thead><tbody>";
       for (let r = 1; r <= groups; r++) {
-        html += `<tr><th>第 ${r} 組</th>` + Array.from({ length: lanes }, (_, l) => { const c = cell[r + "-" + (l + 1)]; return c ? `<td class="has">${esc(c)}</td>` : '<td class="empty">—</td>'; }).join("") + "</tr>";
+        html += `<tr><th>第 ${r} 組（${layout[r - 1]} 班）</th>` + Array.from({ length: lanes }, (_, l) => { const c = cell[r + "-" + (l + 1)]; return c ? `<td class="has">${esc(c)}</td>` : l + 1 > layout[r - 1] ? '<td class="off">不使用</td>' : '<td class="empty">—</td>'; }).join("") + "</tr>";
       }
-      el("board").innerHTML = html + "</tbody></table>";
+      el("board").innerHTML = html + "</tbody></table>" + (layout.some(k => k < lanes) ? `<p class="muted" style="font-size:13px;margin:6px 0 0">分組規則：${layout.map((k, i) => `第 ${i + 1} 組 ${k} 班${k < lanes ? `（只用第 1～${k} 道）` : ""}`).join("、")}。</p>` : "");
       const done = Object.keys(dm).length, todo = [];
       for (let i = 1; i <= n; i++) if (!dm[clsName(i)]) todo.push(clsName(i));
       el("sub").textContent = `${g}共 ${n} 班，已抽 ${done} 班，還剩 ${n - done} 班`;
@@ -137,7 +144,7 @@
       if (!confirm("確定要幫「" + cls + "」抽籤嗎？每班只能抽一次，抽完不能重抽。")) return;
       BUSY = true; const btn = el("goDraw"); setBusy(btn, true, "抽籤中…");
       const box = el("result"); let tick = 0;
-      const anim = setInterval(() => { box.innerHTML = `<div class="draw-big"><div class="n">第 ${1 + (tick % Math.ceil(nClass() / INFO.lanes))} 組　第 ${1 + (tick * 7 % INFO.lanes)} 道</div><div class="t">${esc(cls)} 抽籤中…</div></div>`; tick++; }, 90);
+      const anim = setInterval(() => { box.innerHTML = `<div class="draw-big"><div class="n">第 ${1 + (tick % layoutOf().length)} 組　第 ${1 + (tick * 7 % layoutOf()[tick % layoutOf().length])} 道</div><div class="t">${esc(cls)} 抽籤中…</div></div>`; tick++; }, 90);
       try {
         const [res] = await Promise.all([apiPost("drawLane", { token: AUTH.token, grade: grade(), cls }), new Promise(r => setTimeout(r, 1500))]);
         clearInterval(anim);
