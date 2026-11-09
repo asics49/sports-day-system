@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>道次抽籤 · 右昌國小運動會</title>
+  <link rel="icon" href="assets/banner-small.jpg">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=20261109c">
+  <style>
+    .draw-grid { width: 100%; border-collapse: collapse; text-align: center; }
+    .draw-grid th, .draw-grid td { border: 1px solid var(--line); padding: 12px 6px; font-size: clamp(15px, 2vw, 20px); }
+    .draw-grid th { background: #fff4d6; }
+    .draw-grid td.has { font-weight: 800; background: #fffdf5; }
+    .draw-grid td.empty { color: #bbb; }
+    .draw-big { text-align: center; padding: 22px 10px; border: 2px dashed var(--gold-d); border-radius: 14px; background: #fffaf0; margin-top: 14px; }
+    .draw-big .n { font-size: clamp(30px, 6vw, 56px); font-weight: 900; color: var(--gold-d); letter-spacing: 2px; }
+    .draw-big .t { color: var(--muted); margin-top: 4px; }
+    .todo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .todo-chips span { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-size: 14px; }
+  </style>
+</head>
+<body data-page="draw">
+  <main>
+    <section class="card">
+      <h2>🎲 道次抽籤</h2>
+      <p class="muted">每班由老師登入後自己抽一次，系統會隨機決定「第幾組、第幾道」，不會重複，抽到的結果立刻顯示在下方表格，也會自動帶進秩序冊。每班只能抽一次，抽完不能重抽，抽之前請確認班級。</p>
+      <div class="row" style="align-items:end">
+        <div style="min-width:160px"><label>年級</label><select id="grade"></select></div>
+        <div><button class="btn ghost" id="refresh" type="button">重新整理</button></div>
+        <span class="muted" id="sub" style="font-size:13px"></span>
+      </div>
+      <div id="board" style="margin-top:14px"><p class="muted">載入中…</p></div>
+      <div id="todo" style="margin-top:12px"></div>
+    </section>
+
+    <section class="card" id="drawCard">
+      <h2>我要抽籤</h2>
+      <div id="drawBody"></div>
+    </section>
+
+    <section class="card" id="adminCard" style="display:none">
+      <h2>管理（需要「秩序冊」權限）</h2>
+      <p class="muted">抽錯或需要重抽時，可以清除某一班的結果（該班再抽一次），或整個年級全部清掉重來。</p>
+      <div class="row" style="align-items:end">
+        <div style="min-width:160px"><label>清除某一班</label><select id="resetCls"></select></div>
+        <div><button class="btn ghost" id="resetOne" type="button">清除這一班</button></div>
+        <div><button class="btn red" id="resetAll" type="button">清除整個年級</button></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/config.js?v=20261109c"></script>
+  <script src="js/api.js?v=20261109c"></script>
+  <script src="js/layout.js?v=20261109c"></script>
+  <script>
+    const AUTH_KEY = "yc_auth", COLORS = ["藍", "綠", "黃", "紅", "橘", "白"];
+    let AUTH = null, INFO = { classCount: {}, lanes: 4 }, ROWS = [], BUSY = false;
+    try { AUTH = JSON.parse(localStorage.getItem(AUTH_KEY)); } catch (e) { AUTH = null; }
+    if (isStaleAuth(AUTH)) AUTH = null;
+
+    const grade = () => el("grade").value;
+    const nClass = () => (INFO.classCount || {})[grade()] || 0;
+    const clsName = i => grade().charAt(0) + "年" + i + "班";
+    const drawnMap = () => { const m = {}; ROWS.filter(r => r["年級"] === grade()).forEach(r => { m[normalizeClassName(r["班級"])] = r; }); return m; };
+
+    async function load() {
+      try {
+        const d = await apiGet("draw");
+        INFO = { classCount: d.classCount || {}, lanes: d.lanes || 4 }; ROWS = d.rows || [];
+        const sel = el("grade"), cur = sel.value;
+        if (!sel.options.length) sel.innerHTML = Object.keys(INFO.classCount).map(g => `<option>${esc(g)}</option>`).join("");
+        if (cur) sel.value = cur;
+        render();
+      } catch (e) { el("board").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+
+    function render() {
+      const g = grade(), n = nClass(), lanes = INFO.lanes, groups = Math.ceil(n / lanes), dm = drawnMap();
+      if (!g) { el("board").innerHTML = '<div class="notice">目前沒有開放線上抽籤的年級。</div>'; return; }
+      const cell = {}; Object.keys(dm).forEach(c => { cell[dm[c]["組"] + "-" + dm[c]["道次"]] = c; });
+      let html = '<table class="draw-grid"><thead><tr><th>組別＼道次</th>' + Array.from({ length: lanes }, (_, i) => `<th>${i + 1} 道（${COLORS[i]}）</th>`).join("") + "</tr></thead><tbody>";
+      for (let r = 1; r <= groups; r++) {
+        html += `<tr><th>第 ${r} 組</th>` + Array.from({ length: lanes }, (_, l) => { const c = cell[r + "-" + (l + 1)]; return c ? `<td class="has">${esc(c)}</td>` : '<td class="empty">—</td>'; }).join("") + "</tr>";
+      }
+      el("board").innerHTML = html + "</tbody></table>";
+      const done = Object.keys(dm).length, todo = [];
+      for (let i = 1; i <= n; i++) if (!dm[clsName(i)]) todo.push(clsName(i));
+      el("sub").textContent = `${g}共 ${n} 班，已抽 ${done} 班，還剩 ${n - done} 班`;
+      el("todo").innerHTML = todo.length ? `<div class="muted" style="font-size:13px">還沒抽的班級：</div><div class="todo-chips">${todo.map(c => `<span>${esc(c)}</span>`).join("")}</div>` : '<div class="notice">✅ 全部班級都抽完了！秩序冊的道次分配表會自動使用這份結果。</div>';
+      renderDrawBody(todo); renderAdmin(dm);
+    }
+
+    function renderDrawBody(todo) {
+      const body = el("drawBody");
+      if (!AUTH || !AUTH.token) { body.innerHTML = '<div class="notice">請先到<a href="register.html">「線上報名」</a>用老師帳號登入，再回到這一頁抽籤。</div>'; return; }
+      if (!hasPerm(AUTH, "報名")) { body.innerHTML = '<div class="notice">這個帳號沒有抽籤權限。</div>'; return; }
+      if (!todo.length) { body.innerHTML = '<p class="muted">這個年級已經全部抽完了。</p>'; return; }
+      const keep = el("pickCls") ? el("pickCls").value : "", keepRes = el("result") ? el("result").innerHTML : "";
+      body.innerHTML = `<div class="row" style="align-items:end">
+          <div style="min-width:180px"><label>請選擇你的班級</label><select id="pickCls"><option value="">請選擇</option>${todo.map(c => `<option>${esc(c)}</option>`).join("")}</select></div>
+          <div><button class="btn" id="goDraw" type="button">🎲 抽籤</button></div></div><div id="result"></div>`;
+      if (keep && todo.indexOf(keep) >= 0) el("pickCls").value = keep;
+      el("result").innerHTML = keepRes;
+      el("goDraw").addEventListener("click", doDraw);
+    }
+    function renderAdmin(dm) {
+      const ok = AUTH && hasPerm(AUTH, "秩序冊"); el("adminCard").style.display = ok ? "" : "none"; if (!ok) return;
+      el("resetCls").innerHTML = '<option value="">請選擇</option>' + Object.keys(dm).sort((a, b) => a.localeCompare(b, "zh", { numeric: true })).map(c => `<option>${esc(c)}</option>`).join("");
+    }
+
+    async function doDraw() {
+      if (BUSY) return;
+      const cls = el("pickCls").value;
+      if (!cls) return toast("請先選擇班級", "err");
+      if (!confirm("確定要幫「" + cls + "」抽籤嗎？每班只能抽一次，抽完不能重抽。")) return;
+      BUSY = true; const btn = el("goDraw"); setBusy(btn, true, "抽籤中…");
+      const box = el("result"); let tick = 0;
+      const anim = setInterval(() => { box.innerHTML = `<div class="draw-big"><div class="n">第 ${1 + (tick % Math.ceil(nClass() / INFO.lanes))} 組　第 ${1 + (tick * 7 % INFO.lanes)} 道</div><div class="t">${esc(cls)} 抽籤中…</div></div>`; tick++; }, 90);
+      try {
+        const [res] = await Promise.all([apiPost("drawLane", { token: AUTH.token, grade: grade(), cls }), new Promise(r => setTimeout(r, 1500))]);
+        clearInterval(anim);
+        box.innerHTML = `<div class="draw-big"><div class="t">${esc(res.班級)}${res.already ? "（之前已經抽過）" : " 抽到了"}</div><div class="n">第 ${res.組} 組　第 ${res.道次} 道（${COLORS[res.道次 - 1] || ""}）</div></div>`;
+        toast(res.msg, "ok");
+        await load();
+      } catch (e) {
+        clearInterval(anim); box.innerHTML = "";
+        toast(e.message, "err");
+        if (/登入/.test(e.message)) { localStorage.removeItem(AUTH_KEY); AUTH = null; render(); }
+        else await load();   // 回應可能遺失：重新讀一次看這班是不是已經抽到了
+      } finally { BUSY = false; setBusy(el("goDraw") || btn, false); }
+    }
+
+    async function doReset(cls) {
+      const what = cls ? "「" + cls + "」" : "整個 " + grade();
+      if (!confirm("確定要清除" + what + "的抽籤結果嗎？")) return;
+      try { const res = await apiPost("resetDraw", { token: AUTH.token, grade: grade(), cls }); toast(res.msg, "ok"); await load(); }
+      catch (e) { toast(e.message, "err"); }
+    }
+    el("resetOne").addEventListener("click", () => { const c = el("resetCls").value; if (!c) return toast("請先選擇要清除的班級", "err"); doReset(c); });
+    el("resetAll").addEventListener("click", () => doReset(""));
+    el("grade").addEventListener("change", render);
+    el("refresh").addEventListener("click", load);
+    load();
+    setInterval(() => { if (!document.hidden && !BUSY) load(); }, 15000);
+
+    function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  </script>
+</body>
+</html>

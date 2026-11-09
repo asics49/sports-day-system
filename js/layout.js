@@ -10,6 +10,7 @@ const NAV = [
   { href: "board.html",    label: "即時成績公布", key: "board" },
   { href: "query.html",    label: "成績查詢",   key: "query" },
   { href: "ranking.html",  label: "班級積分",   key: "ranking" },
+  { href: "draw.html",     label: "道次抽籤",   key: "draw" },
   { href: "score.html",    label: "成績輸入",   key: "score" },
   { href: "admin.html",    label: "管理",       key: "admin" },
 ];

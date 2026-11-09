@@ -6,7 +6,7 @@
   <title>班級積分 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261109b">
+  <link rel="stylesheet" href="css/style.css?v=20261109c">
 </head>
 <body data-page="ranking">
   <main>
@@ -23,14 +23,15 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261109b"></script>
-  <script src="js/api.js?v=20261109b"></script>
-  <script src="js/layout.js?v=20261109b"></script>
+  <script src="js/config.js?v=20261109c"></script>
+  <script src="js/api.js?v=20261109c"></script>
+  <script src="js/layout.js?v=20261109c"></script>
   <script>
     async function run() {
       const out = el("out"); out.innerHTML = '<p class="muted">載入中…</p>';
       try {
         const data = await apiGet("ranking", { grade: el("grade").value });
+        data.ranking = data.ranking.filter(function (r) { return ["4年級", "5年級", "6年級"].indexOf(String(r["年級"])) >= 0; });   // 1、2 年級不計班級積分
         if (!data.ranking.length) { out.innerHTML = '<div class="notice">尚無積分資料。</div>'; return; }
         const medal = ["🥇","🥈","🥉"];
         const rows = data.ranking.map(function (r, i) {

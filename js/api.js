@@ -23,7 +23,7 @@ async function parseApiResponse(res) {
 
 // 重送也不會造成重複或錯誤的動作，遇到結果遺失可以自動再送一次
 // register：後端會略過已報名的項目（2026-10-12 起座號也統一比對，不會再因「08」vs「8」重複）；updatestudent 是「設定成」，重送結果一樣
-const RETRY_SAFE_POST = ["login", "googlelogin", "submitscore", "deletescore", "deleteregbatch", "importreg", "register", "updatestudent", "submitprelim", "seteventprelim"];
+const RETRY_SAFE_POST = ["login", "googlelogin", "submitscore", "deletescore", "deleteregbatch", "importreg", "register", "updatestudent", "submitprelim", "seteventprelim", "drawlane"];
 
 async function withRetry(fn, times) {
   for (let i = 0; ; i++) {

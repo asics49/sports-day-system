@@ -6,7 +6,7 @@
   <title>管理 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261109b">
+  <link rel="stylesheet" href="css/style.css?v=20261109c">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
   <style>
@@ -304,10 +304,10 @@
     </div>
   </main>
 
-  <script src="js/config.js?v=20261109b"></script>
-  <script src="js/api.js?v=20261109b"></script>
-  <script src="js/layout.js?v=20261109b"></script>
-  <script src="js/sched.js?v=20261109b"></script>
+  <script src="js/config.js?v=20261109c"></script>
+  <script src="js/api.js?v=20261109c"></script>
+  <script src="js/layout.js?v=20261109c"></script>
+  <script src="js/sched.js?v=20261109c"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [];
@@ -1120,6 +1120,20 @@
     }
 
     const GRID_STORE = {};   // { "6年級": {grid, numbers, colors} }，renderGrid 時記下目前年級的表格
+    // 線上抽籤（draw.html）的結果：該年級全部班級都抽完才採用，轉成跟 LANE_DRAWS 一樣的格式
+    (async function loadOnlineDraws() {
+      try {
+        const d = await apiGet("draw"), cc = d.classCount || {};
+        Object.keys(cc).forEach(function (g) {
+          if (LANE_DRAWS[g]) return;
+          const rows = (d.rows || []).filter(r => r["年級"] === g);
+          if (rows.length < cc[g]) return;
+          const grid = Array.from({ length: Math.ceil(cc[g] / 4) }, () => [0, 0, 0, 0]);
+          rows.forEach(function (r) { const m = String(normalizeClassName(r["班級"])).match(/年(\d+)班/); if (m && grid[r["組"] - 1]) grid[r["組"] - 1][r["道次"] - 1] = Number(m[1]); });
+          LANE_DRAWS[g] = grid;
+        });
+      } catch (e) { /* 讀不到就維持原本的抽籤表 */ }
+    })();
     function laneDrawFor(grade) {
       const d = LANE_DRAWS[grade]; if (!d) return null;
       const g = grade.charAt(0);
