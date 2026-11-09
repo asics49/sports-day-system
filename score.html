@@ -264,30 +264,138 @@
     }
 
     // 本項目所有選手（接力＝班級）的預賽與決賽成績一覽
+    let OV_PEOPLE = [];
+    const isNoShowRec = t => t === "棄權" || t === "請假";
+    const preOn = () => PRE_ROWS.length > 0 || prelimQuota(EV_CUR) > 0 || String(EV_CUR["預賽"] || "").trim() === "是";
     function renderOverview() {
-      const team = isTeamEvent(EV_CUR), hasPre = PRE_ROWS.length > 0;
+      const team = isTeamEvent(EV_CUR), hasPre = preOn();
       const key = r => team ? normalizeClassName(r["班級"]) + "|" : pk(r);
       const people = [], seen = {};
-      const add = (r, from) => { const k = key(r); if (seen[k]) return seen[k]; const o = { 班級: r["班級"], 座號: r["座號"] || "", 姓名: team ? "" : (r["姓名"] || ""), from }; seen[k] = o; people.push(o); return o; };
-      (team && hasPre ? REG_ALL : REG_ALL).forEach(r => add(r, "reg"));
-      PRE_ROWS.forEach(r => { const o = add(r, "pre"); o.pre = r; });
-      RES_CUR.forEach(r => { const o = add(r, "res"); o.res = r; });
-      if (!people.length) { el("overview").innerHTML = ""; return; }
+      const add = r => { const k = key(r); if (seen[k]) return seen[k]; const o = { 年級: r["年級"] || EV_CUR["組別"] || "", 班級: r["班級"], 座號: r["座號"] || "", 姓名: team ? "" : (r["姓名"] || "") }; seen[k] = o; people.push(o); return o; };
+      REG_ALL.forEach(r => add(r));
+      PRE_ROWS.forEach(r => { const o = add(r); o.pre = r; if (!o.座號 && r["座號"]) o.座號 = r["座號"]; });
+      RES_CUR.forEach(r => { const o = add(r); o.res = r; });
+      if (!people.length) { el("overview").innerHTML = ""; OV_PEOPLE = []; return; }
       const finRank = o => { const r = o.res; if (!r) return 9999; const n = Number(r["名次"]); return n || 9000; };
       const preRank = o => o.pre && Number(o.pre["預賽名次"]) || 9999;
       people.sort((a, b) => finRank(a) - finRank(b) || preRank(a) - preRank(b) || normalizeClassName(a.班級).localeCompare(normalizeClassName(b.班級), "zh", { numeric: true }) || (Number(a.座號) || 0) - (Number(b.座號) || 0));
+      OV_PEOPLE = people;
       const fin = o => {
         if (!o.res) return RES_CUR.length ? '<span class="muted">未達標</span>' : '<span class="muted">—</span>';
         const t = String(o.res["紀錄"] || "").trim();
-        if (t === "棄權" || t === "請假") return `<span class="muted">${esc(t)}</span>`;
+        if (isNoShowRec(t)) return `<span class="muted">${esc(t)}</span>`;
         const n = Number(o.res["名次"]); return `<b class="${n <= 3 ? "rank" + n : ""}">第 ${n} 名</b>`;
       };
-      const trs = people.map(o => `<tr><td>${esc(o.班級)}</td><td>${esc(o.座號)}</td><td>${esc(o.姓名 || (team ? "（全班）" : ""))}</td>
+      const trs = people.map((o, i) => `<tr id="ov_${i}"><td>${esc(o.班級)}</td><td>${esc(o.座號)}</td><td>${esc(o.姓名 || (team ? "（全班）" : ""))}</td>
         ${hasPre ? `<td>${esc(o.pre ? o.pre["預賽成績"] : "")}</td><td style="text-align:center">${esc(o.pre ? o.pre["預賽名次"] : "")}</td><td style="text-align:center">${o.pre && String(o.pre["晉級"]).trim() === "是" ? "✅" : ""}</td>` : ""}
-        <td>${fin(o)}</td><td>${esc(o.res && !/棄權|請假/.test(o.res["紀錄"]) ? o.res["紀錄"] : "")}</td><td style="text-align:center">${o.res ? esc(o.res["得分"]) : ""}</td></tr>`).join("");
+        <td>${fin(o)}</td><td>${esc(o.res && !isNoShowRec(String(o.res["紀錄"]).trim()) ? o.res["紀錄"] : "")}</td><td style="text-align:center">${o.res ? esc(o.res["得分"]) : ""}</td>
+        <td style="white-space:nowrap"><button class="btn ghost" type="button" style="padding:3px 10px" onclick="ovEdit(${i})">修改</button>${o.pre || o.res ? ` <button class="btn red" type="button" style="padding:3px 10px" onclick="ovDelete(${i})">刪除</button>` : ""}</td></tr>`).join("");
       el("overview").innerHTML = `<details open><summary style="cursor:pointer;font-weight:700">📋 本項目選手成績一覽（${people.length} ${team ? "班" : "人"}${hasPre ? `，預賽 ${PRE_ROWS.length}、晉級 ${PRE_ROWS.filter(r => String(r["晉級"]).trim() === "是").length}` : ""}，決賽／正式成績 ${RES_CUR.length} 筆）</summary>
-        <div class="table-wrap" style="margin-top:6px"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th>${hasPre ? "<th>預賽成績</th><th>預賽名次</th><th>晉級</th>" : ""}<th>${hasPre ? "決賽名次" : "名次"}</th><th>紀錄</th><th>得分</th></tr></thead><tbody>${trs}</tbody></table></div>
-        <p class="muted" style="font-size:13px;margin:4px 0 0">要修改：在下方選「預賽」或「決賽」，改好後按儲存（整個項目覆蓋）。</p></details>`;
+        <div class="table-wrap" style="margin-top:6px"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th>${hasPre ? "<th>預賽成績</th><th>預賽名次</th><th>晉級</th>" : ""}<th>${hasPre ? "決賽名次" : "名次"}</th><th>紀錄</th><th>得分</th><th>操作</th></tr></thead><tbody>${trs}</tbody></table></div>
+        <div id="ovEditBox"></div>
+        <p class="muted" style="font-size:13px;margin:4px 0 0">按「修改」可改單一選手的成績；「刪除」會刪掉這位選手${hasPre ? "的預賽與決賽" : ""}成績。整批輸入仍可用下方表格。</p></details>`;
+    }
+
+    // 老師帶 token 讀到的預賽列有「預賽成績」欄；沒有代表只拿到公開的晉級名單，不能拿來整批覆蓋（會把沒晉級的人刪掉）
+    function preRowsComplete() { return !PRE_ROWS.length || ("預賽成績" in PRE_ROWS[0]); }
+    // 依預賽成績重算預賽名次（晉級勾選不動）
+    function rerankPre(rows) {
+      const asc = riKind(EV_CUR) === "time";
+      const val = r => { const c = riCell(r["預賽成績"]); return c.t === "num" ? c.n : null; };
+      rows.forEach(r => { const v = val(r); r["預賽名次"] = v === null ? "" : 1 + rows.filter(o => { const w = val(o); return w !== null && (asc ? w < v : w > v); }).length; });
+      return rows;
+    }
+    async function pushPre(rows) {
+      const code = el("code").value;
+      await apiPost("submitPrelim", { token: AUTH.token, code, rows: rows.map(r => ({ 名次: r["預賽名次"] || "", 年級: r["年級"] || "", 班級: r["班級"] || "", 姓名: r["姓名"] || "", 紀錄: r["預賽成績"] || "", 晉級: String(r["晉級"]).trim() === "是" })) });
+    }
+    async function pushRes(rows) {
+      const code = el("code").value;
+      await apiPost("submitScore", { token: AUTH.token, code, rows: rows.map(r => {
+        const t = String(r["紀錄"] || "").trim();
+        return isNoShowRec(t) ? { 名次: 0, 狀態: t, 年級: r["年級"] || "", 班級: r["班級"] || "", 姓名: r["姓名"] || "", 紀錄: t }
+                              : { 名次: Number(r["名次"]), 年級: r["年級"] || "", 班級: r["班級"] || "", 姓名: r["姓名"] || "", 紀錄: t };
+      }) });
+    }
+    async function reloadCur() {
+      const code = el("code").value;
+      const [resD, preD] = await Promise.all([apiGet("query", { code }), apiGet("prelim", { code, token: AUTH.token }).catch(() => ({ rows: PRE_ROWS }))]);
+      RES_CUR = resD.results; PRE_ROWS = preD.rows || [];
+      renderStage(); loadProgress();
+    }
+    const samePerson = (a, b) => (isTeamEvent(EV_CUR) ? normalizeClassName(a["班級"]) + "|" : pk(a)) === (isTeamEvent(EV_CUR) ? normalizeClassName(b["班級"]) + "|" : pk(b));
+
+    function ovEdit(i) {
+      const o = OV_PEOPLE[i]; if (!o) return;
+      const hasPre = preOn(), r = o.res || {}, t = String(r["紀錄"] || "").trim(), st = isNoShowRec(t) ? t : "";
+      const who = esc(o.班級) + " " + esc(o.姓名 || (isTeamEvent(EV_CUR) ? "（全班）" : ""));
+      el("ovEditBox").innerHTML = `<div class="notice" style="margin-top:8px"><b>修改：${who}</b>
+        <div class="row" style="margin-top:8px;align-items:end;gap:12px">
+          ${hasPre ? `<div><label>預賽成績</label><input id="oe_pr" value="${esc(o.pre ? o.pre["預賽成績"] : "")}" style="max-width:120px"></div>
+          <div><label>晉級決賽</label><input type="checkbox" id="oe_pq" ${o.pre && String(o.pre["晉級"]).trim() === "是" ? "checked" : ""} style="width:auto"></div>` : ""}
+          <div><label>${hasPre ? "決賽名次" : "名次"}（空白＝沒有名次）</label><input id="oe_rk" inputmode="numeric" value="${esc(st ? "" : (r["名次"] || ""))}" style="max-width:90px"></div>
+          <div><label>紀錄</label><input id="oe_rec" value="${esc(st ? "" : t)}" style="max-width:120px"></div>
+          <div><label>狀態</label><select id="oe_st"><option value=""></option><option ${st === "棄權" ? "selected" : ""}>棄權</option><option ${st === "請假" ? "selected" : ""}>請假</option></select></div>
+          <div><button class="btn" id="oe_save" type="button">儲存</button> <button class="btn ghost" id="oe_cancel" type="button">取消</button></div>
+        </div>
+        <p class="muted" style="font-size:13px;margin:6px 0 0">${hasPre ? "預賽成績改了，預賽名次會依成績自動重算（晉級勾選照你設定）。" : ""}名次決定得分（第 1～6 名 7/5/4/3/2/1 分）；狀態選棄權或請假時不計名次。</p></div>`;
+      el(`ov_${i}`).style.background = "#fff8e6";
+      el("oe_cancel").addEventListener("click", () => { el("ovEditBox").innerHTML = ""; el(`ov_${i}`).style.background = ""; });
+      el("oe_save").addEventListener("click", () => ovSave(i));
+      el("ovEditBox").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    async function ovSave(i) {
+      const o = OV_PEOPLE[i]; if (!o) return;
+      const hasPre = preOn(), btn = el("oe_save");
+      if (!preRowsComplete()) return toast("讀不到完整的預賽資料（帳號沒有「成績」權限？），無法修改預賽。", "err");
+      const base = { 年級: o.年級, 班級: o.班級, 座號: o.座號, 姓名: o.姓名 };
+      // 決賽／正式成績
+      const rkIn = el("oe_rk").value.trim(), rec = el("oe_rec").value.trim(), st = el("oe_st").value;
+      if (rkIn && !(Number(rkIn) >= 1)) return toast("名次要填 1 以上的數字", "err");
+      let resRows = RES_CUR.filter(r => !samePerson(r, o));
+      if (st) resRows.push(Object.assign({}, base, { 名次: "", 紀錄: st }));
+      else if (rkIn) resRows.push(Object.assign({}, base, { 名次: Number(rkIn), 紀錄: rec }));
+      const resChanged = JSON.stringify(resRows.map(r => [r["班級"], r["姓名"], String(r["名次"]), r["紀錄"]]).sort()) !== JSON.stringify(RES_CUR.map(r => [r["班級"], r["姓名"], String(r["名次"]), r["紀錄"]]).sort());
+      // 預賽
+      let preRows = null;
+      if (hasPre) {
+        const pr = el("oe_pr").value.trim(), pq = el("oe_pq").checked;
+        const old = o.pre ? [String(o.pre["預賽成績"] || ""), String(o.pre["晉級"]).trim() === "是"] : ["", false];
+        if (pr !== old[0] || pq !== old[1]) {
+          preRows = PRE_ROWS.filter(r => !samePerson(r, o)).map(r => Object.assign({}, r));
+          if (pr || pq) preRows.push(Object.assign({}, base, { 預賽成績: pr, 晉級: pq ? "是" : "" }));
+          rerankPre(preRows);
+        }
+      }
+      if (!resChanged && !preRows) { toast("沒有變更", "ok"); el("ovEditBox").innerHTML = ""; return; }
+      setBusy(btn, true, "儲存中…");
+      try {
+        if (preRows) await pushPre(preRows);
+        if (resChanged) await pushRes(resRows);
+        toast("已更新 " + o.班級 + " " + (o.姓名 || "") + " 的成績", "ok");
+        await reloadCur();
+      } catch (e) {
+        toast(e.message, "err");
+        if (/登入/.test(e.message)) { clearAuth(); location.reload(); return; }
+        setBusy(btn, false);
+      }
+    }
+
+    async function ovDelete(i) {
+      const o = OV_PEOPLE[i]; if (!o) return;
+      if (!preRowsComplete()) return toast("讀不到完整的預賽資料（帳號沒有「成績」權限？），無法刪除。", "err");
+      const what = [o.pre ? "預賽" : "", o.res ? (preOn() ? "決賽" : "") + "成績" : ""].filter(Boolean).join("與");
+      if (!confirm("確定要刪除「" + o.班級 + " " + (o.姓名 || "") + "」的" + what + "嗎？")) return;
+      try {
+        if (o.pre) await pushPre(rerankPre(PRE_ROWS.filter(r => !samePerson(r, o)).map(r => Object.assign({}, r))));
+        if (o.res) await pushRes(RES_CUR.filter(r => !samePerson(r, o)));
+        toast("已刪除", "ok");
+        await reloadCur();
+      } catch (e) {
+        toast(e.message, "err");
+        if (/登入/.test(e.message)) { clearAuth(); location.reload(); }
+      }
     }
 
     /* ---- 預賽：輸入預賽成績，系統排名並勾選前 8 名；結果不公布 ---- */
