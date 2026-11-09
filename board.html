@@ -6,7 +6,7 @@
   <title>即時成績公布 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261109a">
+  <link rel="stylesheet" href="css/style.css?v=20261109b">
   <style>
     .board-bar { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
     .board-bar > div { flex:1; min-width:150px; }
@@ -66,9 +66,9 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261109a"></script>
-  <script src="js/api.js?v=20261109a"></script>
-  <script src="js/layout.js?v=20261109a"></script>
+  <script src="js/config.js?v=20261109b"></script>
+  <script src="js/api.js?v=20261109b"></script>
+  <script src="js/layout.js?v=20261109b"></script>
   <script>
     let EVENTS = [], QUALS = [], timer = null, cd = 15, PICKED = false;   // QUALS＝預賽晉級決賽名單（不含預賽成績）   // PICKED＝使用者手動選過項目；沒選就自動顯示最近公布的項目
 
@@ -145,7 +145,7 @@
             el("bs").textContent = (ev["組別"] || "") + "　" + (ev["性別"] || "") + "　預賽完成";
             el("out").innerHTML = `<div class="notice" style="text-align:center;font-size:clamp(15px,2vw,22px)">🏁 預賽已完成，<b>${q.length}</b> 人晉級決賽（決賽成績尚未公布）</div>
               <div class="table-wrap"><table class="board"><thead><tr><th class="rk">晉級</th><th>班級</th><th>姓名</th></tr></thead>
-              <tbody>${q.map(function (r) { return `<tr><td class="rk">✅</td><td>${esc(r["班級"])}</td><td>${esc(r["姓名"])}</td></tr>`; }).join("")}</tbody></table></div>`;
+              <tbody>${q.map(function (r) { return `<tr><td class="rk">✅</td><td>${esc(r["班級"])}</td><td>${esc(r["姓名"] || "（全班）")}</td></tr>`; }).join("")}</tbody></table></div>`;
             return;
           }
           el("out").innerHTML = '<div class="notice" style="text-align:center;font-size:clamp(15px,2vw,22px)">此項目尚未公布成績</div>'; return;

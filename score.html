@@ -6,7 +6,7 @@
   <title>成績輸入 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261109a">
+  <link rel="stylesheet" href="css/style.css?v=20261109b">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
 </head>
@@ -78,14 +78,14 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261109a"></script>
-  <script src="js/api.js?v=20261109a"></script>
-  <script src="js/layout.js?v=20261109a"></script>
+  <script src="js/config.js?v=20261109b"></script>
+  <script src="js/api.js?v=20261109b"></script>
+  <script src="js/layout.js?v=20261109b"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [], REG = [];
     let REG_ALL = [], RES_CUR = [], PRE_ROWS = [], PRE_LIST = [], EV_CUR = {}, STAGE = "final";
-    const PRELIM_N = 8;   // 預賽選出前 8 名晉級決賽
+    let PRE_N = 8;   // 本項目預賽晉級人數（prelimQuota：60/100/400接力＝8，1、2年級大隊接力＝4）
 
     function loadAuth() { try { AUTH = JSON.parse(localStorage.getItem(AUTH_KEY)); } catch (e) { AUTH = null; } }
     function saveAuth(a) { AUTH = a; localStorage.setItem(AUTH_KEY, JSON.stringify(a)); }
@@ -209,7 +209,10 @@
         ]);
         REG_ALL = regData.registrants; RES_CUR = resData.results; PRE_ROWS = preData.rows || [];
         EV_CUR = EVENTS.find(e => e["代碼"] === code) || {};
-        const flag = String(EV_CUR["預賽"] || "").trim() === "是";
+        PRE_N = prelimQuota(EV_CUR) || 8;
+        const flag = prelimQuota(EV_CUR) > 0 || String(EV_CUR["預賽"] || "").trim() === "是";
+        // 接力（以班為單位）且有預賽：名單用「全部班級」，不是個別報名的隊員
+        if (flag && isTeamEvent(EV_CUR)) REG_ALL = classTeams(EV_CUR);
         // 預設階段：有預賽、還沒存預賽結果、也沒有決賽成績 → 預賽；其餘 → 決賽
         STAGE = !RES_CUR.length && !PRE_ROWS.length && flag ? "prelim" : "final";
         renderStage();
@@ -217,16 +220,20 @@
     }
 
     // 階段列：預賽（選出晉級名單，不公布）／決賽（正式成績，公布）
+    function classTeams(ev) {
+      const g = String(ev["組別"]), n = (CONFIG.classCount || {})[g] || 12, gn = g.charAt(0);
+      return Array.from({ length: n }, (_, i) => ({ "年級": g, "班級": gn + "年" + (i + 1) + "班", "座號": "", "姓名": "" }));
+    }
     function renderStage() {
-      const code = el("code").value, flag = String(EV_CUR["預賽"] || "").trim() === "是";
+      const code = el("code").value, rule = prelimQuota(EV_CUR) > 0, flag = rule || String(EV_CUR["預賽"] || "").trim() === "是";
       const quals = PRE_ROWS.filter(r => String(r["晉級"]).trim() === "是");
       let note = "";
       if (STAGE === "final" && quals.length) note = `<div class="notice" style="margin-top:8px">預賽已選出 <b>${quals.length}</b> 人晉級決賽，下方「選報名者」只列晉級的選手。</div>`;
       else if (STAGE === "final" && flag && !PRE_ROWS.length) note = `<div class="notice" style="margin-top:8px;border-color:#f0b8b0;background:#fdecea">⚠ 此項目有預賽，但還沒有預賽結果。直接在這裡儲存的是<b>決賽成績，會立刻公布</b>；請先切到「預賽」選出晉級名單。</div>`;
       el("stageBar").innerHTML = `<div class="row" style="align-items:center;gap:18px">
-          <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="radio" name="stage" value="prelim" ${STAGE === "prelim" ? "checked" : ""} style="width:auto"> <b>預賽</b>（選出前 ${PRELIM_N} 名晉級決賽，<u>不公布</u>）</label>
+          <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="radio" name="stage" value="prelim" ${STAGE === "prelim" ? "checked" : ""} style="width:auto"> <b>預賽</b>（選出前 ${PRE_N} 名晉級決賽，<u>不公布</u>）</label>
           <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="radio" name="stage" value="final" ${STAGE === "final" ? "checked" : ""} style="width:auto"> <b>決賽／一般項目</b>（正式成績，儲存後公布）</label>
-          <label style="margin:0;display:flex;gap:6px;align-items:center" class="muted"><input type="checkbox" id="preFlag" ${flag ? "checked" : ""} style="width:auto"> 此項目有預賽</label>
+          <label style="margin:0;display:flex;gap:6px;align-items:center" class="muted"><input type="checkbox" id="preFlag" ${flag ? "checked" : ""} ${rule ? "disabled" : ""} style="width:auto"> 此項目有預賽${rule ? "（依規定）" : ""}</label>
         </div>${note}`;
       el("stageBar").querySelectorAll("input[name=stage]").forEach(r => r.addEventListener("change", function () { STAGE = this.value; renderStage(); }));
       el("preFlag").addEventListener("change", async function () {
@@ -249,16 +256,16 @@
       const trs = PRE_LIST.map((r, i) => {
         const sv = saved[pk(r)] || {};
         return `<tr data-pi="${i}"${PRE_ROWS.length ? ' data-manual="1"' : ""}>
-          <td>${esc(r["班級"])}</td><td>${esc(r["座號"])}</td><td>${esc(r["姓名"])}</td>
+          <td>${esc(r["班級"])}</td><td>${esc(r["座號"] || "—")}</td><td>${esc(r["姓名"] || "（全班）")}</td>
           <td><input class="pr" value="${esc(sv["預賽成績"] || "")}" placeholder="${asc ? "秒（X＝未出賽）" : "公尺（X＝未出賽）"}" style="min-width:110px"></td>
           <td class="prk" style="text-align:center;font-weight:800"></td>
           <td style="text-align:center"><input type="checkbox" class="pq" ${String(sv["晉級"]).trim() === "是" ? "checked" : ""} style="width:auto"></td></tr>`;
       }).join("");
-      el("area").innerHTML = `<p class="notice">預賽成績<b>不會公布</b>。輸入每位選手的預賽成績，系統依成績（${asc ? "秒數小者為先" : "數值大者為先"}）排名並自動勾選前 <b>${PRELIM_N}</b> 名（同成績並列都會勾選），也可以手動調整勾選。儲存後切到「決賽」輸入決賽成績，名單只會列出晉級選手。</p>
+      el("area").innerHTML = `<p class="notice">預賽成績<b>不會公布</b>。輸入每位選手的預賽成績，系統依成績（${asc ? "秒數小者為先" : "數值大者為先"}）排名並自動勾選前 <b>${PRE_N}</b> 名（同成績並列都會勾選），也可以手動調整勾選。儲存後切到「決賽」輸入決賽成績，名單只會列出晉級選手。</p>
         <div class="table-wrap"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th><th>預賽成績</th><th>預賽名次</th><th>晉級決賽</th></tr></thead><tbody>${trs}</tbody></table></div>
         <div class="row" style="margin-top:12px;align-items:center">
           <button class="btn" id="preSave" type="button">儲存預賽結果</button>
-          <button class="btn ghost" id="preAuto" type="button">依成績重新勾選前 ${PRELIM_N} 名</button>
+          <button class="btn ghost" id="preAuto" type="button">依成績重新勾選前 ${PRE_N} 名</button>
           <button class="btn red" id="preDel" type="button">清除預賽結果</button>
           <span class="muted" id="preSum"></span></div>`;
       const body = el("area");
@@ -277,7 +284,7 @@
         if (vals[i] === null) { k.textContent = ""; delete tr.dataset.rank; if (!tr.dataset.manual) tr.querySelector(".pq").checked = false; return; }
         const rank = 1 + vals.filter(v => v !== null && (asc ? v < vals[i] : v > vals[i])).length;
         k.textContent = rank; tr.dataset.rank = rank;
-        if (!tr.dataset.manual) tr.querySelector(".pq").checked = rank <= PRELIM_N;
+        if (!tr.dataset.manual) tr.querySelector(".pq").checked = rank <= PRE_N;
       });
       const q = trs.filter(tr => tr.querySelector(".pq").checked).length, n = vals.filter(v => v !== null).length;
       el("preSum").textContent = `已輸入 ${n} 人成績，晉級決賽 ${q} 人`;
@@ -309,7 +316,7 @@
       const noShows = (existing || []).filter(isNo);
       (existing || []).filter(r => !isNo(r)).forEach(r => { byRank[Number(r["名次"])] = r; });
 
-      const opts = REG.map((r, i) => `<option value="${i}">${esc(r["班級"])} ${esc(r["姓名"])}（座${esc(r["座號"])}）</option>`).join("");
+      const opts = REG.map((r, i) => `<option value="${i}">${r["姓名"] ? esc(r["班級"]) + " " + esc(r["姓名"]) + "（座" + esc(r["座號"]) + "）" : esc(r["班級"])}</option>`).join("");
       let html = REG.length
         ? `<p class="notice">此項目共 ${REG.length} 人報名。可從下拉選擇報名者自動帶入班級/姓名，或手動輸入（大隊接力、趣味競賽請直接填班級）。</p>`
         : `<p class="notice">此項目尚無報名資料，請手動填入班級。</p>`;

@@ -105,6 +105,15 @@ function normalizeSeat(s) {
   return /^\d+$/.test(s) ? String(Number(s)) : s;
 }
 // 不用報名的項目（大隊接力等，見 config.js noRegEvents）
+// 預賽規則：60公尺、100公尺、400公尺接力各取前 8 名進決賽；1、2 年級大隊接力取前 4 名。回傳晉級人數（0＝沒有預賽規則）
+function prelimQuota(e) {
+  var n = String(e && e["名稱"]), g = String(e && e["組別"]);
+  if (n === "60公尺" || n === "100公尺" || n === "400公尺接力") return 8;
+  if (n === "大隊接力" && (g === "1年級" || g === "2年級")) return 4;
+  return 0;
+}
+// 以「班」為單位的項目（接力）：預賽名單是班級，不是個人
+function isTeamEvent(e) { return /接力/.test(String(e && e["名稱"])); }
 function isNoRegEvent(e) { return (CONFIG.noRegEvents || []).indexOf(String(e && e["名稱"])) >= 0; }
 // 賽程的適用年級（回傳 [4,5,6] 這種陣列；null＝全校）：「4-6年級」「5、6年級」「6年級」；
 // 年級欄空白時看項目名稱（如「6年級全員競賽」）。秩序冊與賽事行事曆頁共用。
