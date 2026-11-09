@@ -86,6 +86,7 @@
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [], REG = [];
     let REG_ALL = [], RES_CUR = [], PRE_ROWS = [], PRE_LIST = [], EV_CUR = {}, STAGE = "final";
+    let FIN_MODE = (function () { try { return localStorage.getItem("yc_finmode") || "list"; } catch (e) { return "list"; } })();   // 決賽輸入方式：list＝依名單、rank＝依名次
     let PRE_N = 8;   // 本項目預賽晉級人數（prelimQuota：60/100/400接力＝8，1、2年級大隊接力＝4）
 
     function loadAuth() { try { AUTH = JSON.parse(localStorage.getItem(AUTH_KEY)); } catch (e) { AUTH = null; } }
@@ -243,13 +244,17 @@
       const code = el("code").value, rule = prelimQuota(EV_CUR) > 0, flag = rule || String(EV_CUR["預賽"] || "").trim() === "是";
       const quals = PRE_ROWS.filter(r => String(r["晉級"]).trim() === "是");
       let note = "";
-      if (STAGE === "final" && quals.length) note = `<div class="notice" style="margin-top:8px">預賽已選出 <b>${quals.length}</b> 人晉級決賽，下方「選報名者」只列晉級的選手。</div>`;
+      if (STAGE === "final" && quals.length) note = `<div class="notice" style="margin-top:8px">預賽已選出 <b>${quals.length}</b> 人晉級決賽，下方名單只列晉級的選手。</div>`;
       else if (STAGE === "final" && flag && !PRE_ROWS.length) note = `<div class="notice" style="margin-top:8px;border-color:#f0b8b0;background:#fdecea">⚠ 此項目有預賽，但還沒有預賽結果。直接在這裡儲存的是<b>決賽成績，會立刻公布</b>；請先切到「預賽」選出晉級名單。</div>`;
       el("stageBar").innerHTML = `<div class="row" style="align-items:center;gap:18px">
           <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="radio" name="stage" value="prelim" ${STAGE === "prelim" ? "checked" : ""} style="width:auto"> <b>預賽</b>（選出前 ${PRE_N} 名晉級決賽，<u>不公布</u>）</label>
           <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="radio" name="stage" value="final" ${STAGE === "final" ? "checked" : ""} style="width:auto"> <b>決賽／一般項目</b>（正式成績，儲存後公布）</label>
           <label style="margin:0;display:flex;gap:6px;align-items:center" class="muted"><input type="checkbox" id="preFlag" ${flag ? "checked" : ""} ${rule ? "disabled" : ""} style="width:auto"> 此項目有預賽${rule ? "（依規定）" : ""}</label>
-        </div>${note}`;
+        </div>${note}${STAGE === "final" ? `<div class="row" style="align-items:center;gap:18px;margin-top:8px">
+          <span class="muted">輸入方式：</span>
+          <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="radio" name="finmode" value="list" ${FIN_MODE === "list" ? "checked" : ""} style="width:auto"> <b>依名單輸入成績</b>（列出${quals.length ? "晉級" : "全部"}選手，系統自動排名）</label>
+          <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="radio" name="finmode" value="rank" ${FIN_MODE === "rank" ? "checked" : ""} style="width:auto"> 依名次輸入（逐名次選選手）</label></div>` : ""}`;
+      el("stageBar").querySelectorAll("input[name=finmode]").forEach(r => r.addEventListener("change", function () { FIN_MODE = this.value; try { localStorage.setItem("yc_finmode", FIN_MODE); } catch (e) {} renderStage(); }));
       el("stageBar").querySelectorAll("input[name=stage]").forEach(r => r.addEventListener("change", function () { STAGE = this.value; renderStage(); }));
       el("preFlag").addEventListener("change", async function () {
         const box = this;
@@ -260,7 +265,10 @@
       });
       renderOverview();
       if (STAGE === "prelim") renderPrelim(code);
-      else { REG = quals.length ? REG_ALL.filter(r => quals.some(q => pk(q) === pk(r))) : REG_ALL; renderRows(code, RES_CUR); }
+      else {
+        REG = quals.length ? REG_ALL.filter(r => quals.some(q => pk(q) === pk(r))) : REG_ALL;
+        if (FIN_MODE === "list") renderFinalList(code); else renderRows(code, RES_CUR);
+      }
     }
 
     // 本項目所有選手（接力＝班級）的預賽與決賽成績一覽
@@ -458,6 +466,92 @@
         toast(e.message, "err");
         if (/登入/.test(e.message)) { clearAuth(); location.reload(); }
       } finally { setBusy(btn, false); }
+    }
+
+    /* ---- 決賽：依名單輸入成績（列出晉級／報名選手，輸入成績後系統排名） ---- */
+    let FIN_LIST = [];
+    function renderFinalList(code) {
+      const team = isTeamEvent(EV_CUR), asc = riKind(EV_CUR) === "time";
+      const key = r => team ? normalizeClassName(r["班級"]) + "|" : pk(r);
+      const base = REG.length ? REG : (team ? classTeams(EV_CUR) : []);
+      const list = [], seen = {};
+      const add = r => { const k = key(r); if (seen[k]) return seen[k]; const o = { 年級: r["年級"] || EV_CUR["組別"] || "", 班級: r["班級"], 座號: r["座號"] || "", 姓名: team ? "" : (r["姓名"] || "") }; seen[k] = o; list.push(o); return o; };
+      base.forEach(add);
+      RES_CUR.forEach(r => { const had = seen[key(r)]; const o = add(r); if (!had) o.extra = true; o.res = r; if (!o.姓名 && r["姓名"]) o.姓名 = r["姓名"]; });
+      const cmp = (a, b) => (a.extra ? 1 : 0) - (b.extra ? 1 : 0) || normalizeClassName(a.班級).localeCompare(normalizeClassName(b.班級), "zh", { numeric: true }) || (Number(a.座號) || 0) - (Number(b.座號) || 0);
+      list.sort(cmp);
+      FIN_LIST = list;
+      if (!list.length) { el("area").innerHTML = '<p class="notice">此項目沒有報名資料。請改用「依名次輸入」手動填班級與姓名。</p>'; return; }
+      const unit = asc ? "秒" : riKind(EV_CUR) === "vj" ? "公分" : "公尺";
+      const trs = list.map((o, i) => {
+        const r = o.res || {}, t = String(r["紀錄"] || "").trim(), st = isNoShowRec(t) ? t : "";
+        const rk = st ? "" : (r["名次"] || ""), manual = rk && riCell(t).t !== "num";   // 只有名次、沒有可比較的成績 → 保留原名次
+        return `<tr data-fi="${i}"${manual ? ' data-manual="1"' : ""}${o.extra ? ' style="background:#fff8e6"' : ""}>
+          <td>${esc(o.班級)}</td><td>${esc(o.座號 || "—")}</td><td>${esc(o.姓名 || (team ? "（全班）" : ""))}${o.extra ? ' <span class="muted" style="font-size:12px">（不在名單，原有成績）</span>' : ""}</td>
+          <td><input class="fv" value="${esc(st ? "" : t)}" placeholder="${unit}（X＝未出賽）" style="min-width:110px"></td>
+          <td><select class="fs"><option value=""></option><option ${st === "棄權" ? "selected" : ""}>棄權</option><option ${st === "請假" ? "selected" : ""}>請假</option></select></td>
+          <td><input class="fr" inputmode="numeric" value="${esc(rk)}" style="width:56px;font-weight:800"></td>
+          <td class="fsc" style="text-align:center"></td></tr>`;
+      }).join("");
+      el("area").innerHTML = `<p class="notice">列出${REG.length && PRE_ROWS.some(r => String(r["晉級"]).trim() === "是") ? "<b>晉級決賽</b>的" : "此項目全部"} ${list.length} ${team ? "班" : "位選手"}。輸入成績（${asc ? "秒數小者為先" : "數值大者為先"}，可打 12.3、1:05.32），系統自動排名次與得分（同成績並列）；名次也可以手動改。沒出賽的填 X（不寫入，成績查詢顯示「未達標」），棄權／請假選右邊狀態。</p>
+        <div class="table-wrap"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th><th>成績</th><th>狀態</th><th>名次</th><th>得分</th></tr></thead><tbody>${trs}</tbody></table></div>
+        <div class="row" style="margin-top:12px;align-items:center">
+          <button class="btn" id="finSave" type="button">儲存決賽成績（公布）</button>
+          <button class="btn ghost" id="finAuto" type="button">依成績重新排名</button>
+          <button class="btn red" id="delBtn" type="button">清除此項成績</button>
+          <span class="muted" id="finSum"></span></div>
+        <p class="muted" style="font-size:13px;margin:6px 0 0">儲存會覆蓋此項目原有成績。</p>`;
+      const body = el("area");
+      body.querySelectorAll(".fv, .fs").forEach(x => x.addEventListener(x.tagName === "SELECT" ? "change" : "input", finCalc));
+      body.querySelectorAll(".fr").forEach(x => x.addEventListener("input", function () { this.closest("tr").dataset.manual = "1"; finCalc(); }));
+      el("finAuto").addEventListener("click", function () { body.querySelectorAll("tr[data-fi]").forEach(tr => delete tr.dataset.manual); finCalc(); });
+      el("finSave").addEventListener("click", () => saveFinalList(code));
+      el("delBtn").addEventListener("click", () => del(code));
+      finCalc();
+    }
+    function finCalc() {
+      const trs = Array.from(document.querySelectorAll("#area tr[data-fi]")), asc = riKind(EV_CUR) === "time";
+      const vals = trs.map(tr => { if (tr.querySelector(".fs").value) return null; const c = riCell(tr.querySelector(".fv").value); return c.t === "num" && c.n > 0 ? c.n : null; });
+      let n = 0, bad = 0;
+      trs.forEach(function (tr, i) {
+        const fr = tr.querySelector(".fr"), st = tr.querySelector(".fs").value, c = riCell(tr.querySelector(".fv").value);
+        tr.querySelector(".fv").style.borderColor = !st && c.t === "bad" ? "#d33" : "";
+        if (!st && c.t === "bad") bad++;
+        if (st) fr.value = "";
+        else if (!tr.dataset.manual) fr.value = vals[i] === null ? "" : 1 + vals.filter(v => v !== null && (asc ? v < vals[i] : v > vals[i])).length;
+        const k = Number(fr.value);
+        if (k >= 1) n++;
+        fr.className = "fr" + (k >= 1 && k <= 3 ? " rank" + k : "");
+        tr.querySelector(".fsc").textContent = st ? st : k >= 1 ? (CONFIG.scoreTable[k - 1] || 0) : "";
+      });
+      el("finSum").innerHTML = `有名次 ${n} ${isTeamEvent(EV_CUR) ? "班" : "人"}` + (bad ? `　<b class="rank1">${bad} 格看不懂的成績（紅框）</b>` : "");
+    }
+    async function saveFinalList(code) {
+      const asc = riKind(EV_CUR) === "time", unit = asc ? "秒" : riKind(EV_CUR) === "vj" ? "公分" : "公尺";
+      const rows = []; let bad = 0;
+      document.querySelectorAll("#area tr[data-fi]").forEach(function (tr) {
+        const o = FIN_LIST[Number(tr.dataset.fi)], st = tr.querySelector(".fs").value, raw = tr.querySelector(".fv").value.trim(), rk = Number(tr.querySelector(".fr").value);
+        const base = { 年級: o.年級, 班級: o.班級, 姓名: o.姓名 };
+        if (st) { rows.push(Object.assign({ 名次: 0, 狀態: st, 紀錄: st }, base)); return; }
+        const c = riCell(raw);
+        if (c.t === "bad" && !(rk >= 1)) { bad++; return; }
+        if (!(rk >= 1)) return;   // 空白或 X：不寫入
+        const rec = c.t === "num" && /^[\d.:]+$/.test(riHalf(raw)) ? (raw.indexOf(":") >= 0 ? riHalf(raw) : riR(c.n) + unit) : raw;
+        rows.push(Object.assign({ 名次: rk, 紀錄: rec }, base));
+      });
+      if (bad) return toast("有看不懂的成績（紅框），請修正或填 X", "err");
+      if (!rows.length) return toast("請至少輸入一位選手的成績", "err");
+      if (!confirm(`確定儲存並公布「${EV_CUR["名稱"]} ${EV_CUR["組別"]} ${EV_CUR["性別"] || ""}」決賽成績？\n有名次 ${rows.filter(r => r.名次 >= 1).length} 筆${rows.some(r => r.狀態) ? `、棄權／請假 ${rows.filter(r => r.狀態).length} 筆` : ""}，會覆蓋此項目原有成績。`)) return;
+      const btn = el("finSave"); setBusy(btn, true, "儲存中…");
+      try {
+        const res = await apiPost("submitScore", { token: AUTH.token, code, rows });
+        toast(res.msg, "ok");
+        RES_CUR = (await apiGet("query", { code })).results; renderStage(); loadProgress();
+      } catch (e) {
+        toast(e.message, "err");
+        if (/登入/.test(e.message)) { clearAuth(); location.reload(); }
+        setBusy(btn, false);
+      }
     }
 
     function renderRows(code, existing) {
