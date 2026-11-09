@@ -114,6 +114,15 @@ function prelimQuota(e) {
 }
 // 以「班」為單位的項目（接力）：預賽名單是班級，不是個人
 function isTeamEvent(e) { return /接力/.test(String(e && e["名稱"])); }
+// 公告排序：置頂的在最上面，其餘（以及置頂之間）依日期由新到舊；同一天依寫入順序，後寫入的在上面（後端有給 _i＝在試算表的列序）
+function sortAnnouncements(list) {
+  var t = function (a) { var d = new Date(a["日期"]).getTime(); return isNaN(d) ? 0 : d; };
+  return (list || []).map(function (a, i) { return { a: a, i: i }; }).sort(function (x, y) {
+    var p = (String(y.a["置頂"]) === "是") - (String(x.a["置頂"]) === "是");
+    if (p) return p;
+    return t(y.a) - t(x.a) || ((y.a._i != null && x.a._i != null) ? y.a._i - x.a._i : x.i - y.i);
+  }).map(function (o) { return o.a; });
+}
 function isNoRegEvent(e) { return (CONFIG.noRegEvents || []).indexOf(String(e && e["名稱"])) >= 0; }
 // 賽程的適用年級（回傳 [4,5,6] 這種陣列；null＝全校）：「4-6年級」「5、6年級」「6年級」；
 // 年級欄空白時看項目名稱（如「6年級全員競賽」）。秩序冊與賽事行事曆頁共用。

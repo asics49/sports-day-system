@@ -6,7 +6,7 @@
   <title>管理 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261109d">
+  <link rel="stylesheet" href="css/style.css?v=20261109e">
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="js/vendor/xlsx.full.min.js"></script>
   <style>
@@ -333,10 +333,10 @@
     </div>
   </main>
 
-  <script src="js/config.js?v=20261109d"></script>
-  <script src="js/api.js?v=20261109d"></script>
-  <script src="js/layout.js?v=20261109d"></script>
-  <script src="js/sched.js?v=20261109d"></script>
+  <script src="js/config.js?v=20261109e"></script>
+  <script src="js/api.js?v=20261109e"></script>
+  <script src="js/layout.js?v=20261109e"></script>
+  <script src="js/sched.js?v=20261109e"></script>
   <script>
     const AUTH_KEY = "yc_auth";
     let AUTH = null, EVENTS = [];
@@ -434,7 +434,7 @@
       const box=el("a_list");
       try{
         const d=await apiGet("announcements");
-        ANN_LIST = d.announcements;
+        ANN_LIST = sortAnnouncements(d.announcements);
         if(!ANN_LIST.length){ box.innerHTML='<p class="muted">目前尚無公告。</p>'; return; }
         // 用索引查表，不要把標題/內容塞進 onclick 字串——標題含單引號會把屬性截斷
         box.innerHTML = ANN_LIST.map(function(a, i){
