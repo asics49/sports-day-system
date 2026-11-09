@@ -229,7 +229,7 @@
         // 接力（以班為單位）且有預賽：名單用「全部班級」，不是個別報名的隊員
         if (flag && isTeamEvent(EV_CUR)) REG_ALL = classTeams(EV_CUR);
         // 預設階段：有預賽、還沒存預賽結果、也沒有決賽成績 → 預賽；其餘 → 決賽
-        STAGE = !RES_CUR.length && !PRE_ROWS.length && flag ? "prelim" : "final";
+        STAGE = !RES_CUR.length && (PRE_ROWS.length || flag) ? "prelim" : "final";
         renderStage();
       } catch (e) { area.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
@@ -573,7 +573,8 @@
 
     /* ---- 紀錄表 Excel 匯入（整個項目覆蓋；名次由系統計算） ---- */
     const RI_TIME = ["60公尺", "100公尺", "200公尺", "400公尺接力", "大隊接力", "體育班大隊接力"];
-    let RI_ITEMS = [], RI_EXISTING = {};
+    let RI_ITEMS = [], RI_EXISTING = {}, RI_PRE = {};
+    const riHasPre = ev => !!ev && (prelimQuota(ev) > 0 || String(ev["預賽"] || "").trim() === "是");
     const riHalf = v => String(v).replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/[．。]/g, ".").replace(/：/g, ":").replace(/[Ｘｘ×✕✗]/g, "X").trim();
     const riR = n => Math.round(n * 100) / 100;
     function riCell(v) {   // 一格成績 → {t:"num",n} / {t:"x"} / {t:"blank"} / {t:"bad",raw}
@@ -637,7 +638,7 @@
         const top = val.sort((a, b) => a.rank - b.rank), nos = entries.filter(e => e.res.k === "nos");
         items.push({ sheet: nm, code, ev, title: (ev["名稱"] === "跳高" ? "垂直跳（摸高器；原跳高）" : ev["名稱"]) + "（" + ev["組別"] + " " + ev["性別"] + "）", total: entries.length,
           nVal: val.length, nX: entries.filter(e => e.res.k === "x").length, nBlank: entries.filter(e => e.res.k === "blank").length,
-          bads: entries.filter(e => e.res.k === "bad"), top, nNos: nos.length,
+          bads: entries.filter(e => e.res.k === "bad"), top, nNos: nos.length, entries,
           rows: top.map(e => ({ 代碼: code, 名次: e.rank, 年級: ev["組別"], 班級: e.cls, 姓名: e.name, 紀錄: e.res.text }))
             .concat(nos.map(e => ({ 代碼: code, 名次: 0, 狀態: e.res.s, 年級: ev["組別"], 班級: e.cls, 姓名: e.name, 紀錄: e.res.s }))) });
       });
@@ -650,6 +651,8 @@
         if (!EVENTS.length) EVENTS = (await apiGet("events")).events;
         const q = await apiGet("query"); RI_EXISTING = {};
         q.results.forEach(r => { RI_EXISTING[r["項目代碼"]] = (RI_EXISTING[r["項目代碼"]] || 0) + 1; });
+        const pq = await apiGet("prelim", { token: AUTH.token }).catch(() => ({ rows: [] })); RI_PRE = {};
+        (pq.rows || []).forEach(r => { RI_PRE[r["項目代碼"]] = (RI_PRE[r["項目代碼"]] || 0) + 1; });
         const buf = await f.arrayBuffer(), wb = XLSX.read(buf, { type: "array" });
         const res = riParse(wb); RI_ITEMS = res.items;
         renderRiPreview(res.skipped);
@@ -666,6 +669,9 @@
         const trs = it.top.map(e => `<tr><td class="${e.rank <= 3 ? "rank" + e.rank : ""}" style="font-weight:800">${e.rank}</td><td>${esc(e.cls)}</td><td>${esc(e.name)}</td><td>${esc(e.res.text)}</td><td class="sc">${CONFIG.scoreTable[e.rank - 1] || 0}</td></tr>`).join("");
         return `<div class="ri-item" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px">
           <label style="display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" class="ri_chk" data-i="${i}" ${ok ? "checked" : ""} style="width:auto"><b>${esc(it.title)}</b><span class="muted" style="font-size:12px">工作表：${esc(it.sheet)}</span></label>
+          ${riHasPre(it.ev) ? `<div style="margin:6px 0;padding:6px 10px;background:#eef4ff;border-radius:8px">這是有預賽的項目，請選擇這份成績是：
+            <select class="ri_mode" data-i="${i}" style="width:auto;display:inline-block"><option value="">— 請選擇 —</option><option value="prelim">預賽（選前 ${prelimQuota(it.ev) || 8} 名晉級決賽，不公布、不計分）</option><option value="final">決賽（正式成績，公布並計分）</option></select>
+            <span class="muted" style="font-size:12px">目前預賽 ${RI_PRE[it.code] || 0} 筆、決賽 ${RI_EXISTING[it.code] || 0} 筆</span></div>` : ""}
           <div class="muted" style="font-size:13px;margin:4px 0">共 ${it.total} 位：有成績 <b>${it.nVal}</b>、X（未出賽／犯規）${it.nX}${it.nNos ? `、棄權／請假 ${it.nNos}` : ""}${it.nBlank ? `、<b class="rank1">空白 ${it.nBlank}（還沒填）</b>` : ""}${it.nBad ? `、<b class="rank1">看不懂 ${it.nBad}</b>` : ""}。
             ${exist ? `此項目現有 <b>${exist}</b> 筆成績，匯入會<b>整個覆蓋</b>。` : "此項目目前沒有成績。"}${ok ? "" : " <b class='rank1'>有問題或沒有成績，預設不勾選。</b>"}</div>
           ${issues}${it.nBlank ? `<div class="rank1" style="font-size:13px">⚠ 空白視為還沒填，不會計名次；確定沒比賽請填 X。</div>` : ""}
@@ -673,30 +679,48 @@
       }).join("");
       box.innerHTML = `<div class="notice">共讀到 <b>${RI_ITEMS.length}</b> 個項目${skipped.length ? `（略過沒有項目代碼的工作表：${skipped.map(esc).join("、")}）` : ""}。所有有成績的選手都會寫入（前 ${CONFIG.scoreTable.length} 名有積分，其餘得分 0）；勾選要匯入的項目。</div>${cards}
         <div style="margin-top:8px"><button class="btn" id="ri_import" type="button">確認匯入</button> <span id="ri_sum" class="muted"></span></div><div id="ri_result" style="margin-top:10px"></div>`;
-      box.querySelectorAll(".ri_chk").forEach(c => c.addEventListener("change", updateRiSum));
+      box.querySelectorAll(".ri_chk, .ri_mode").forEach(c => c.addEventListener("change", updateRiSum));
       el("ri_import").addEventListener("click", doRiImport); updateRiSum();
     }
     const riSel = () => Array.from(document.querySelectorAll(".ri_chk:checked")).map(c => RI_ITEMS[Number(c.dataset.i)]);
+    const riMode = it => { if (!riHasPre(it.ev)) return "final"; const m = document.querySelector(`.ri_mode[data-i="${RI_ITEMS.indexOf(it)}"]`); return m ? m.value : ""; };
+    // 預賽匯入：全部有成績的人（含名次、是否晉級），X／棄權／請假也記下來（不晉級）
+    function riPreRows(it) {
+      const q = prelimQuota(it.ev) || 8;
+      return it.entries.filter(e => e.res.k === "val" || e.res.k === "x" || e.res.k === "nos").map(e => ({
+        名次: e.res.k === "val" ? e.rank : "", 年級: it.ev["組別"], 班級: e.cls, 姓名: e.name,
+        紀錄: e.res.k === "val" ? e.res.text : e.res.k === "x" ? "X" : e.res.s, 晉級: e.res.k === "val" && e.rank <= q }));
+    }
     function updateRiSum() {
-      const sel = riSel(), n = sel.reduce((a, it) => a + it.rows.length, 0);
-      el("ri_import").disabled = !sel.length; el("ri_sum").textContent = sel.length ? `已選 ${sel.length} 個項目、將寫入 ${n} 筆成績` : "請先勾選要匯入的項目";
+      const sel = riSel(), noMode = sel.filter(it => !riMode(it));
+      const pre = sel.filter(it => riMode(it) === "prelim"), fin = sel.filter(it => riMode(it) === "final");
+      el("ri_import").disabled = !sel.length || noMode.length > 0;
+      el("ri_sum").innerHTML = !sel.length ? "請先勾選要匯入的項目"
+        : noMode.length ? `<b class="rank1">請先選擇「${noMode.map(it => esc(it.title)).join("、")}」是預賽還是決賽</b>`
+        : `已選 ${sel.length} 個項目：${fin.length ? `決賽／正式成績 ${fin.length} 項（${fin.reduce((a, it) => a + it.rows.length, 0)} 筆）` : ""}${fin.length && pre.length ? "、" : ""}${pre.length ? `預賽 ${pre.length} 項（${pre.reduce((a, it) => a + riPreRows(it).length, 0)} 筆，不公布）` : ""}`;
     }
     async function doRiImport() {
       const sel = riSel(); if (!sel.length) return;
-      const rows = sel.flatMap(it => it.rows), replaceCodes = sel.map(it => it.code);
-      const over = sel.filter(it => RI_EXISTING[it.code]).length;
-      if (!confirm(`確定匯入 ${sel.length} 個項目（共 ${rows.length} 筆成績）？\n其中 ${over} 個項目原本就有成績，會被整個覆蓋。`)) return;
+      if (sel.some(it => !riMode(it))) return toast("有預賽的項目請先選擇是預賽還是決賽", "err");
+      const fins = sel.filter(it => riMode(it) === "final"), pres = sel.filter(it => riMode(it) === "prelim");
+      const rows = fins.flatMap(it => it.rows), replaceCodes = fins.map(it => it.code);
+      const over = fins.filter(it => RI_EXISTING[it.code]).length, overPre = pres.filter(it => RI_PRE[it.code]).length;
+      if (!confirm(`確定匯入？\n${fins.length ? `・決賽／正式成績 ${fins.length} 項（${rows.length} 筆，會公布並計分）${over ? `，其中 ${over} 項原本有成績會被整個覆蓋` : ""}\n` : ""}${pres.length ? `・預賽 ${pres.length} 項（不公布，自動選出晉級名單）${overPre ? `，其中 ${overPre} 項原本有預賽資料會被整個覆蓋` : ""}` : ""}`)) return;
       const b = el("ri_import"); setBusy(b, true, "匯入中…");
       el("ri_result").innerHTML = '<p class="muted">匯入中，請稍候，不要關閉頁面…</p>';
       try {
-        let res;
-        for (let t = 0; ; t++) {   // 覆蓋式匯入重送結果相同，遇到 Google 遺失回應可以直接重試
+        let res = { added: 0, replaced: 0, errors: [] }; const preMsgs = [];
+        if (fins.length) for (let t = 0; ; t++) {   // 覆蓋式匯入重送結果相同，遇到 Google 遺失回應可以直接重試
           try { res = await apiPost("importScores", { token: AUTH.token, rows, replaceCodes }); break; }
           catch (e) { if (e instanceof ApiLostResponse && t < 2) continue; throw e; }
         }
-        el("ri_result").innerHTML = `<div class="notice">✅ 匯入完成：${sel.length} 個項目、寫入 <b>${res.added}</b> 筆成績（覆蓋掉舊成績 ${res.replaced || 0} 筆）。${res.errors && res.errors.length ? "<br>" + res.errors.map(esc).join("<br>") : ""}</div>`;
+        for (const it of pres) {   // submitprelim 也是整個項目覆蓋，apiPost 會自動重試
+          const r = await apiPost("submitPrelim", { token: AUTH.token, code: it.code, rows: riPreRows(it) });
+          preMsgs.push(esc(it.title) + "：" + esc(r.msg)); RI_PRE[it.code] = r.added;
+        }
+        el("ri_result").innerHTML = `<div class="notice">✅ 匯入完成：${fins.length ? `決賽／正式成績 ${fins.length} 項、寫入 <b>${res.added}</b> 筆（覆蓋掉舊成績 ${res.replaced || 0} 筆）。` : ""}${preMsgs.length ? "<br>預賽：<br>" + preMsgs.join("<br>") : ""}${res.errors && res.errors.length ? "<br>" + res.errors.map(esc).join("<br>") : ""}</div>`;
         toast("匯入完成", "ok");
-        sel.forEach(it => { RI_EXISTING[it.code] = it.rows.length; });
+        fins.forEach(it => { RI_EXISTING[it.code] = it.rows.length; });
         setBusy(b, false); b.disabled = true; b.textContent = "已匯入完成";
         loadProgress();
       } catch (e) {
