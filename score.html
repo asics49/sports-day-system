@@ -42,6 +42,7 @@
       <label>選擇項目</label>
       <select id="code"><option value="">請選擇項目</option></select>
 
+      <div id="overview" style="margin-top:12px"></div>
       <div id="stageBar" style="margin-top:12px"></div>
       <div id="area" style="margin-top:14px"></div>
     </section>
@@ -158,27 +159,41 @@
       const box = el("p_out");
       box.innerHTML = '<p class="muted">載入中…</p>';
       try {
-        const [evD, regD, resD] = await Promise.all([apiGet("events"), apiGet("reglist"), apiGet("query")]);
-        const regCount = {}, resCount = {};
+        const [evD, regD, resD, preD] = await Promise.all([apiGet("events"), apiGet("reglist"), apiGet("query"),
+          apiGet("prelim", { token: AUTH.token }).catch(() => ({ rows: [] }))]);
+        const regCount = {}, resCount = {}, preCount = {}, qCount = {};
         regD.regs.forEach(function (r) { const c = r["項目代碼"]; regCount[c] = (regCount[c] || 0) + 1; });
         resD.results.forEach(function (r) { const c = r["項目代碼"]; resCount[c] = (resCount[c] || 0) + 1; });
+        (preD.rows || []).forEach(function (r) { const c = r["項目代碼"]; preCount[c] = (preCount[c] || 0) + 1; if (String(r["晉級"]).trim() === "是") qCount[c] = (qCount[c] || 0) + 1; });
         const rows = evD.events.map(function (e) {
-          const code = e["代碼"], reg = regCount[code] || 0, done = resCount[code] || 0;
-          let status;
-          if (done === 0) status = reg > 0 ? '<span class="rank1">⚠ 尚未登錄</span>' : '<span class="muted">尚無報名</span>';
-          else if (reg && done < reg) status = '<span style="color:#8a5a10">部分登錄 (' + done + '/' + reg + ')</span>';
-          else status = '<span style="color:var(--green)">✅ 已登錄</span>';
-          return { code: code, name: e["名稱"], group: e["組別"], sex: e["性別"], reg: reg, done: done, status: status };
+          const code = e["代碼"], reg = regCount[code] || 0, done = resCount[code] || 0, pre = preCount[code] || 0, q = qCount[code] || 0;
+          const hasPre = prelimQuota(e) > 0 || String(e["預賽"] || "").trim() === "是";
+          let status, stage = "";
+          if (hasPre) stage = pre ? `<div style="font-size:12px;color:#2b5fb4">🏁 預賽已登錄 ${pre} 人，晉級 ${q} 人</div>` : '<div style="font-size:12px" class="muted">預賽未登錄</div>';
+          if (done > 0) status = (hasPre ? "決賽" : "") + '<span style="color:var(--green)">✅ 已登錄</span>';
+          else if (pre > 0) status = '<span style="color:#8a5a10">⏳ 決賽尚未登錄</span>';
+          else if (isNoRegEvent(e) || isTeamEvent(e)) status = '<span class="rank1">⚠ 尚未登錄</span>';
+          else status = reg > 0 ? '<span class="rank1">⚠ 尚未登錄</span>' : '<span class="muted">尚無報名</span>';
+          return { code, name: e["名稱"], group: e["組別"], sex: e["性別"], reg, done, pre, status: status + stage };
         });
-        const doneN = rows.filter(function (r) { return r.done > 0; }).length;
-        const trs = rows.map(function (r) {
+        PROG_ROWS = rows;
+        const doneN = rows.filter(r => r.done > 0).length, preN = rows.filter(r => !r.done && r.pre > 0).length;
+        const trs = rows.map(function (r, i) {
           return `<tr><td>${esc(r.name)}</td><td>${esc(r.group)}</td><td>${esc(r.sex)}</td>
-            <td style="text-align:center">${r.reg}</td><td style="text-align:center">${r.done}</td><td>${r.status}</td></tr>`;
+            <td style="text-align:center">${r.reg}</td><td style="text-align:center">${r.done}${r.pre ? `<div style="font-size:12px;color:#2b5fb4">預賽 ${r.pre}</div>` : ""}</td><td>${r.status}</td>
+            <td><button class="btn ghost" type="button" style="padding:4px 12px" onclick="openEvent(${i})">管理</button></td></tr>`;
         }).join("");
-        box.innerHTML = `<div class="notice">共 ${rows.length} 個項目，已有成績 ${doneN} 項，尚未登錄 ${rows.length - doneN} 項。</div>
-          <div class="table-wrap"><table><thead><tr><th>項目</th><th>組別</th><th>性別</th><th>報名人數</th><th>已登錄</th><th>狀態</th></tr></thead>
+        box.innerHTML = `<div class="notice">共 ${rows.length} 個項目：決賽／正式成績已登錄 ${doneN} 項${preN ? `、只完成預賽 ${preN} 項` : ""}、尚未登錄 ${rows.length - doneN - preN} 項。按「管理」可查看該項目所有選手的成績並修改。</div>
+          <div class="table-wrap"><table><thead><tr><th>項目</th><th>組別</th><th>性別</th><th>報名人數</th><th>已登錄</th><th>狀態</th><th></th></tr></thead>
           <tbody>${trs}</tbody></table></div>`;
       } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+    }
+    let PROG_ROWS = [];
+    // 從進度表開啟某項目的成績管理（上方「成績輸入」區塊）
+    function openEvent(i) {
+      const r = PROG_ROWS[i]; if (!r) return;
+      el("code").value = r.code; onPickEvent();
+      el("panel").scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     async function fillEvents() {
@@ -198,7 +213,7 @@
     const pk = r => normalizeClassName(r["班級"]) + "|" + String(r["姓名"] || "").trim();
     async function onPickEvent() {
       const code = el("code").value, area = el("area");
-      el("stageBar").innerHTML = "";
+      el("stageBar").innerHTML = ""; el("overview").innerHTML = "";
       if (!code) { area.innerHTML = ""; return; }
       area.innerHTML = '<p class="muted">載入報名名單與現有成績…</p>';
       try {
@@ -243,8 +258,36 @@
           EV_CUR["預賽"] = box.checked ? "是" : ""; toast(res.msg, "ok");
         } catch (e) { toast(e.message, "err"); box.checked = !box.checked; }
       });
+      renderOverview();
       if (STAGE === "prelim") renderPrelim(code);
       else { REG = quals.length ? REG_ALL.filter(r => quals.some(q => pk(q) === pk(r))) : REG_ALL; renderRows(code, RES_CUR); }
+    }
+
+    // 本項目所有選手（接力＝班級）的預賽與決賽成績一覽
+    function renderOverview() {
+      const team = isTeamEvent(EV_CUR), hasPre = PRE_ROWS.length > 0;
+      const key = r => team ? normalizeClassName(r["班級"]) + "|" : pk(r);
+      const people = [], seen = {};
+      const add = (r, from) => { const k = key(r); if (seen[k]) return seen[k]; const o = { 班級: r["班級"], 座號: r["座號"] || "", 姓名: team ? "" : (r["姓名"] || ""), from }; seen[k] = o; people.push(o); return o; };
+      (team && hasPre ? REG_ALL : REG_ALL).forEach(r => add(r, "reg"));
+      PRE_ROWS.forEach(r => { const o = add(r, "pre"); o.pre = r; });
+      RES_CUR.forEach(r => { const o = add(r, "res"); o.res = r; });
+      if (!people.length) { el("overview").innerHTML = ""; return; }
+      const finRank = o => { const r = o.res; if (!r) return 9999; const n = Number(r["名次"]); return n || 9000; };
+      const preRank = o => o.pre && Number(o.pre["預賽名次"]) || 9999;
+      people.sort((a, b) => finRank(a) - finRank(b) || preRank(a) - preRank(b) || normalizeClassName(a.班級).localeCompare(normalizeClassName(b.班級), "zh", { numeric: true }) || (Number(a.座號) || 0) - (Number(b.座號) || 0));
+      const fin = o => {
+        if (!o.res) return RES_CUR.length ? '<span class="muted">未達標</span>' : '<span class="muted">—</span>';
+        const t = String(o.res["紀錄"] || "").trim();
+        if (t === "棄權" || t === "請假") return `<span class="muted">${esc(t)}</span>`;
+        const n = Number(o.res["名次"]); return `<b class="${n <= 3 ? "rank" + n : ""}">第 ${n} 名</b>`;
+      };
+      const trs = people.map(o => `<tr><td>${esc(o.班級)}</td><td>${esc(o.座號)}</td><td>${esc(o.姓名 || (team ? "（全班）" : ""))}</td>
+        ${hasPre ? `<td>${esc(o.pre ? o.pre["預賽成績"] : "")}</td><td style="text-align:center">${esc(o.pre ? o.pre["預賽名次"] : "")}</td><td style="text-align:center">${o.pre && String(o.pre["晉級"]).trim() === "是" ? "✅" : ""}</td>` : ""}
+        <td>${fin(o)}</td><td>${esc(o.res && !/棄權|請假/.test(o.res["紀錄"]) ? o.res["紀錄"] : "")}</td><td style="text-align:center">${o.res ? esc(o.res["得分"]) : ""}</td></tr>`).join("");
+      el("overview").innerHTML = `<details open><summary style="cursor:pointer;font-weight:700">📋 本項目選手成績一覽（${people.length} ${team ? "班" : "人"}${hasPre ? `，預賽 ${PRE_ROWS.length}、晉級 ${PRE_ROWS.filter(r => String(r["晉級"]).trim() === "是").length}` : ""}，決賽／正式成績 ${RES_CUR.length} 筆）</summary>
+        <div class="table-wrap" style="margin-top:6px"><table><thead><tr><th>班級</th><th>座號</th><th>姓名</th>${hasPre ? "<th>預賽成績</th><th>預賽名次</th><th>晉級</th>" : ""}<th>${hasPre ? "決賽名次" : "名次"}</th><th>紀錄</th><th>得分</th></tr></thead><tbody>${trs}</tbody></table></div>
+        <p class="muted" style="font-size:13px;margin:4px 0 0">要修改：在下方選「預賽」或「決賽」，改好後按儲存（整個項目覆蓋）。</p></details>`;
     }
 
     /* ---- 預賽：輸入預賽成績，系統排名並勾選前 8 名；結果不公布 ---- */
@@ -302,7 +345,7 @@
         const res = await apiPost("submitPrelim", { token: AUTH.token, code, rows });
         toast(res.msg, "ok");
         PRE_ROWS = (await apiGet("prelim", { code, token: AUTH.token })).rows || [];
-        renderStage();
+        renderStage(); loadProgress();
       } catch (e) {
         toast(e.message, "err");
         if (/登入/.test(e.message)) { clearAuth(); location.reload(); }
@@ -310,7 +353,8 @@
     }
 
     function renderRows(code, existing) {
-      const n = CONFIG.scoreTable.length;                // 名次 1..N
+      const quals = PRE_ROWS.filter(r => String(r["晉級"]).trim() === "是").length;
+      const n = Math.max(CONFIG.scoreTable.length, quals);   // 名次 1..N（預賽晉級 8 人時決賽列 8 名；第 7 名以後得分 0）
       const byRank = {};
       const NOSHOW = ["棄權", "請假"], isNo = r => NOSHOW.indexOf(String(r["紀錄"] || "").trim()) >= 0;
       const noShows = (existing || []).filter(isNo);
@@ -331,7 +375,7 @@
           <td><input class="c" value="${esc(ex["班級"] || "")}" placeholder="4年1班"></td>
           <td><input class="nm" value="${esc(ex["姓名"] || "")}" placeholder="姓名"></td>
           <td><input class="rec" value="${esc(ex["紀錄"] || "")}" placeholder="秒 / 公尺" style="min-width:90px"></td>
-          <td class="sc">${CONFIG.scoreTable[rank - 1]}</td></tr>`;
+          <td class="sc">${CONFIG.scoreTable[rank - 1] || 0}</td></tr>`;
       }
       html += '</tbody></table></div>';
       html += `<h3 style="margin:16px 0 4px">棄權／請假</h3>
@@ -388,6 +432,7 @@
       try {
         const res = await apiPost("submitScore", { token: AUTH.token, code, rows });
         toast(res.msg, "ok");
+        RES_CUR = (await apiGet("query", { code })).results; renderOverview(); loadProgress();
       } catch (e) {
         toast(e.message, "err");
         if (/登入/.test(e.message)) { clearAuth(); location.reload(); }
