@@ -463,36 +463,36 @@
     function renderRows(code, existing) {
       const quals = PRE_ROWS.filter(r => String(r["晉級"]).trim() === "是").length;
       const n = Math.max(CONFIG.scoreTable.length, quals);   // 名次 1..N（預賽晉級 8 人時決賽列 8 名；第 7 名以後得分 0）
-      const byRank = {};
       const NOSHOW = ["棄權", "請假"], isNo = r => NOSHOW.indexOf(String(r["紀錄"] || "").trim()) >= 0;
       const noShows = (existing || []).filter(isNo);
-      (existing || []).filter(r => !isNo(r)).forEach(r => { byRank[Number(r["名次"])] = r; });
+      const ranked = (existing || []).filter(r => !isNo(r)).sort((a, b) => (Number(a["名次"]) || 999) - (Number(b["名次"]) || 999));
+      const gOpts = g => '<option value=""></option>' + ["1年級", "2年級", "3年級", "4年級", "5年級", "6年級"].map(x => `<option ${g == x ? "selected" : ""}>${x}</option>`).join("");
 
       const opts = REG.map((r, i) => `<option value="${i}">${r["姓名"] ? esc(r["班級"]) + " " + esc(r["姓名"]) + "（座" + esc(r["座號"]) + "）" : esc(r["班級"])}</option>`).join("");
       let html = REG.length
         ? `<p class="notice">此項目共 ${REG.length} 人報名。可從下拉選擇報名者自動帶入班級/姓名，或手動輸入（大隊接力、趣味競賽請直接填班級）。</p>`
         : `<p class="notice">此項目尚無報名資料，請手動填入班級。</p>`;
 
-      html += '<div class="table-wrap"><table><thead><tr><th>名次</th><th>選報名者</th><th>年級</th><th>班級</th><th>姓名</th><th>紀錄</th><th>得分</th></tr></thead><tbody>';
-      for (let rank = 1; rank <= n; rank++) {
-        const ex = byRank[rank] || {};
-        html += `<tr data-rank="${rank}">
-          <td class="${rank <= 3 ? "rank" + rank : ""}" style="font-weight:800">${rank}</td>
+      if (ranked.length) html += `<p class="muted" style="margin:4px 0">目前已有 <b>${ranked.length}</b> 筆名次成績（全部列在下面，同名次並列也會各列一行）。</p>`;
+      html += '<div class="table-wrap"><table><thead><tr><th>名次</th><th>選報名者</th><th>年級</th><th>班級</th><th>姓名</th><th>紀錄</th><th>得分</th></tr></thead><tbody id="rankBody">';
+      const rkRow = (ex, rank) => `<tr data-r="1">
+          <td><input class="rk" inputmode="numeric" value="${esc(rank)}" style="width:56px;font-weight:800"></td>
           <td><select class="pick"><option value="">— 手動 —</option>${opts}</select></td>
-          <td><select class="g"><option value=""></option><option ${ex["年級"] == "4年級" ? "selected" : ""}>4年級</option><option ${ex["年級"] == "5年級" ? "selected" : ""}>5年級</option><option ${ex["年級"] == "6年級" ? "selected" : ""}>6年級</option></select></td>
+          <td><select class="g">${gOpts(ex["年級"])}</select></td>
           <td><input class="c" value="${esc(ex["班級"] || "")}" placeholder="4年1班"></td>
           <td><input class="nm" value="${esc(ex["姓名"] || "")}" placeholder="姓名"></td>
           <td><input class="rec" value="${esc(ex["紀錄"] || "")}" placeholder="秒 / 公尺" style="min-width:90px"></td>
-          <td class="sc">${CONFIG.scoreTable[rank - 1] || 0}</td></tr>`;
-      }
-      html += '</tbody></table></div>';
+          <td class="sc"></td></tr>`;
+      ranked.forEach(r => { html += rkRow(r, r["名次"]); });
+      for (let rank = ranked.length + 1; rank <= n; rank++) html += rkRow({}, rank);
+      html += '</tbody></table></div><button class="btn ghost" id="rkAdd" type="button" style="margin-top:6px">＋ 再加一列名次</button>';
       html += `<h3 style="margin:16px 0 4px">棄權／請假</h3>
         <p class="muted" style="margin:0 0 6px">報名了但沒有出賽的選手：選「棄權」或「請假」，成績查詢會顯示這個原因；沒有填的選手，在已公布成績的項目裡會顯示「未達標」。</p>
         <div class="table-wrap"><table><thead><tr><th>狀態</th><th>選報名者</th><th>年級</th><th>班級</th><th>姓名</th></tr></thead><tbody id="noshowBody">`;
       const nsRow = ex => `<tr class="ns-row">
           <td><select class="ns"><option value=""></option><option ${ex["紀錄"] == "棄權" ? "selected" : ""}>棄權</option><option ${ex["紀錄"] == "請假" ? "selected" : ""}>請假</option></select></td>
           <td><select class="pick"><option value="">— 手動 —</option>${opts}</select></td>
-          <td><select class="g"><option value=""></option><option ${ex["年級"] == "4年級" ? "selected" : ""}>4年級</option><option ${ex["年級"] == "5年級" ? "selected" : ""}>5年級</option><option ${ex["年級"] == "6年級" ? "selected" : ""}>6年級</option></select></td>
+          <td><select class="g">${gOpts(ex["年級"])}</select></td>
           <td><input class="c" value="${esc(ex["班級"] || "")}" placeholder="4年1班"></td>
           <td><input class="nm" value="${esc(ex["姓名"] || "")}" placeholder="姓名"></td></tr>`;
       for (let i = 0; i < Math.max(3, noShows.length + 1); i++) html += nsRow(noShows[i] || {});
@@ -513,7 +513,18 @@
           tr.querySelector(".nm").value = r["姓名"] || "";
         });
       };
-      el("area").querySelectorAll("tr[data-rank], tr.ns-row").forEach(bindPick);
+      // 名次改了，得分跟著變
+      const bindRank = function (tr) {
+        const upd = () => { const k = Number(tr.querySelector(".rk").value); tr.querySelector(".sc").textContent = k >= 1 ? (CONFIG.scoreTable[k - 1] || 0) : ""; tr.querySelector(".rk").className = "rk" + (k >= 1 && k <= 3 ? " rank" + k : ""); };
+        tr.querySelector(".rk").addEventListener("input", upd); upd();
+      };
+      el("area").querySelectorAll("tr[data-r], tr.ns-row").forEach(bindPick);
+      el("area").querySelectorAll("tr[data-r]").forEach(bindRank);
+      el("rkAdd").addEventListener("click", function () {
+        const trs = el("rankBody").querySelectorAll("tr[data-r]"), last = trs.length ? Number(trs[trs.length - 1].querySelector(".rk").value) || trs.length : 0;
+        const t = document.createElement("tbody"); t.innerHTML = rkRow({}, last + 1);
+        const tr = t.firstElementChild; el("rankBody").appendChild(tr); bindPick(tr); bindRank(tr);
+      });
       el("nsAdd").addEventListener("click", function () {
         const t = document.createElement("tbody"); t.innerHTML = nsRow({});
         const tr = t.firstElementChild; el("noshowBody").appendChild(tr); bindPick(tr);
@@ -524,12 +535,16 @@
 
     async function save(code) {
       const rows = [];
-      el("area").querySelectorAll("tr[data-rank]").forEach(function (tr) {
+      let badRank = false;
+      el("area").querySelectorAll("tr[data-r]").forEach(function (tr) {
         const cls = tr.querySelector(".c").value.trim();
         const nm = tr.querySelector(".nm").value.trim();
         if (!cls && !nm) return;                    // 空白列略過
-        rows.push({ 名次: Number(tr.dataset.rank), 年級: tr.querySelector(".g").value, 班級: cls, 姓名: nm, 紀錄: tr.querySelector(".rec").value.trim() });
+        const rk = Number(tr.querySelector(".rk").value);
+        if (!(rk >= 1)) { badRank = true; return; }
+        rows.push({ 名次: rk, 年級: tr.querySelector(".g").value, 班級: cls, 姓名: nm, 紀錄: tr.querySelector(".rec").value.trim() });
       });
+      if (badRank) return toast("有填了班級／姓名但名次空白或不是數字的列，請補上名次", "err");
       el("area").querySelectorAll("tr.ns-row").forEach(function (tr) {
         const st = tr.querySelector(".ns").value, cls = tr.querySelector(".c").value.trim(), nm = tr.querySelector(".nm").value.trim();
         if (!st || (!cls && !nm)) return;
