@@ -34,17 +34,23 @@
         data.ranking = data.ranking.filter(function (r) { return ["4年級", "5年級", "6年級"].indexOf(String(r["年級"])) >= 0; });   // 1、2 年級不計班級積分
         if (!data.ranking.length) { out.innerHTML = '<div class="notice">尚無積分資料。</div>'; return; }
         const medal = ["🥇","🥈","🥉"];
-        const rows = data.ranking.map(function (r, i) {
-          const cls = i < 3 ? "rank" + (i + 1) : "";
-          return `<tr>
-            <td class="${cls}" style="font-size:16px">${medal[i] || (i + 1)}</td>
-            <td>${esc(r["年級"])}</td><td>${esc(r["班級"])}</td>
-            <td class="${cls}" style="font-weight:800">${esc(r["總分"])}</td>
-            <td class="muted">${esc(r["場次"])}</td></tr>`;
+        // 班級積分是各年級分開比（不同年級不互相排名）；同分並列同名次
+        const grades = ["6年級", "5年級", "4年級"].filter(g => data.ranking.some(r => String(r["年級"]) === g));
+        out.innerHTML = grades.map(function (g) {
+          const list = data.ranking.filter(r => String(r["年級"]) === g).sort((a, b) => Number(b["總分"]) - Number(a["總分"]));
+          const rows = list.map(function (r) {
+            const rk = 1 + list.filter(o => Number(o["總分"]) > Number(r["總分"])).length;
+            const cls = rk <= 3 ? "rank" + rk : "";
+            return `<tr>
+              <td class="${cls}" style="font-size:16px;width:64px">${medal[rk - 1] || rk}</td>
+              <td>${esc(r["班級"])}</td>
+              <td class="${cls}" style="font-weight:800">${esc(r["總分"])}</td>
+              <td class="muted">${esc(r["場次"])}</td></tr>`;
+          }).join("");
+          return `<h3 style="margin:14px 0 6px">🏆 ${esc(g)}</h3><div class="table-wrap"><table>
+            <thead><tr><th>名次</th><th>班級</th><th>總積分</th><th>得分場次</th></tr></thead>
+            <tbody>${rows}</tbody></table></div>`;
         }).join("");
-        out.innerHTML = `<div class="table-wrap"><table>
-          <thead><tr><th>名次</th><th>年級</th><th>班級</th><th>總積分</th><th>得分場次</th></tr></thead>
-          <tbody>${rows}</tbody></table></div>`;
       } catch (e) { out.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
     el("go").addEventListener("click", run);

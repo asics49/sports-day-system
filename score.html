@@ -212,17 +212,20 @@
     }
 
     const pk = r => normalizeClassName(r["班級"]) + "|" + String(r["姓名"] || "").trim();
+    let PICK_SEQ = 0;
     async function onPickEvent() {
       const code = el("code").value, area = el("area");
       el("stageBar").innerHTML = ""; el("overview").innerHTML = "";
       if (!code) { area.innerHTML = ""; return; }
       area.innerHTML = '<p class="muted">載入報名名單與現有成績…</p>';
+      const seq = ++PICK_SEQ;   // 快速切換項目時，較慢回來的舊回應不能蓋掉新項目
       try {
         const [regData, resData, preData] = await Promise.all([
           apiGet("registrants", { code }),
           apiGet("query", { code }),
           apiGet("prelim", { code, token: AUTH.token }).catch(() => ({ rows: [] })),
         ]);
+        if (seq !== PICK_SEQ) return;
         REG_ALL = regData.registrants; RES_CUR = resData.results; PRE_ROWS = preData.rows || [];
         EV_CUR = EVENTS.find(e => e["代碼"] === code) || {};
         PRE_N = prelimQuota(EV_CUR) || 8;
@@ -948,9 +951,10 @@
       try{
         const res=await apiPost("importScores",{token:AUTH.token, rows});
         toast("匯入完成：新增 "+res.added+" 筆成績","ok");
-        el("s_preview").innerHTML += '<div class="notice">✅ 已匯入 '+res.added+' 筆。</div>';
-      }catch(e){ toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
-      finally{ setBusy(b,false); }
+        // 不可用 innerHTML +=（會把按鈕換成複本，狀態卡在「匯入中…」）；這是附加式匯入，成功後停用按鈕避免重複匯入
+        setBusy(b,false); b.textContent="已匯入完成"; b.disabled=true;
+        b.insertAdjacentHTML("afterend",' <span class="notice" style="display:inline-block">✅ 已匯入 '+res.added+' 筆。</span>');
+      }catch(e){ setBusy(b,false); toast(e.message,"err"); if(/登入/.test(e.message)){clearAuth();location.reload();} }
     }
     function downloadScoreTemplate(){
       const ws=XLSX.utils.aoa_to_sheet([

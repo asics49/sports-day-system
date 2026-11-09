@@ -93,7 +93,24 @@
 
     function renderDrawBody(todo) {
       const body = el("drawBody");
-      if (!AUTH || !AUTH.token) { body.innerHTML = '<div class="notice">請先到<a href="register.html">「線上報名」</a>用老師帳號登入，再回到這一頁抽籤。</div>'; return; }
+      if (!AUTH || !AUTH.token) {
+        if (el("dl_email")) return;   // 每 15 秒會重畫，登入表單已在畫面上就不要蓋掉（避免打到一半被清空）
+        body.innerHTML = `<p class="muted" style="margin:0 0 8px">請用班級帳號登入（例如 1年1班＝yocps101）。</p>
+          <div class="row" style="align-items:end">
+            <div style="min-width:160px"><label>帳號</label><input id="dl_email" autocomplete="username"></div>
+            <div style="min-width:160px"><label>密碼</label><input id="dl_pw" type="password" autocomplete="current-password"></div>
+            <div><button class="btn" id="dl_go" type="button">登入</button></div></div><div id="dl_msg"></div>`;
+        const go = async function () {
+          const email = el("dl_email").value.trim(), pw = el("dl_pw").value;
+          if (!email || !pw) return toast("請輸入帳號與密碼", "err");
+          const b = el("dl_go"); setBusy(b, true, "登入中…");
+          try { const r = await apiPost("login", { email, password: pw }); AUTH = r; localStorage.setItem(AUTH_KEY, JSON.stringify(r)); toast("登入成功", "ok"); el("drawBody").innerHTML = ""; await load(); }
+          catch (e) { el("dl_msg").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; setBusy(b, false); }
+        };
+        el("dl_go").addEventListener("click", go);
+        el("dl_pw").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+        return;
+      }
       if (!hasPerm(AUTH, "報名")) { body.innerHTML = '<div class="notice">這個帳號沒有抽籤權限。</div>'; return; }
       if (!todo.length) { body.innerHTML = '<p class="muted">這個年級已經全部抽完了。</p>'; return; }
       const keep = el("pickCls") ? el("pickCls").value : "", keepRes = el("result") ? el("result").innerHTML : "";
@@ -101,6 +118,10 @@
           <div style="min-width:180px"><label>請選擇你的班級</label><select id="pickCls"><option value="">請選擇</option>${todo.map(c => `<option>${esc(c)}</option>`).join("")}</select></div>
           <div><button class="btn" id="goDraw" type="button">🎲 抽籤</button></div></div><div id="result"></div>`;
       if (keep && todo.indexOf(keep) >= 0) el("pickCls").value = keep;
+      else {   // 班級帳號 yocps1NN → 自動選好 1年N班
+        const m = String(AUTH.email || "").match(/^yocps(\d)(\d\d)$/i), mine = m ? m[1] + "年" + Number(m[2]) + "班" : "";
+        if (mine && todo.indexOf(mine) >= 0 && grade() === m[1] + "年級") el("pickCls").value = mine;
+      }
       el("result").innerHTML = keepRes;
       el("goDraw").addEventListener("click", doDraw);
     }
