@@ -95,6 +95,7 @@
         <option value="reg">報名管理</option>
         <option value="rec">成績紀錄表（紙本）</option>
         <option value="unreg">未報名班級（催繳通知）</option>
+        <option value="qual">決賽晉級名單（公告／匯出）</option>
         <option value="user">帳號管理</option>
       </select>
       <div id="noPermMsg" class="notice" style="display:none;margin-top:8px">此帳號沒有任何管理功能的權限。報名請到「<a href="register.html">線上報名</a>」、成績輸入請到「<a href="score.html">成績輸入</a>」；需要其他權限請洽管理者。</div>
@@ -273,6 +274,32 @@
       </section>
     </div>
 
+    <!-- 決賽晉級名單 -->
+    <div class="func-panel" id="qualWrap" style="display:none">
+      <section class="card">
+        <h2>決賽晉級名單</h2>
+        <p class="muted">彙整有預賽項目的<b>晉級決賽名單</b>（資料來自成績輸入頁的「預賽」），可產生公告文字複製到 LINE、發布成網站公告，或匯出 Excel。公告文字只列班級與姓名，<b>不含預賽成績</b>。</p>
+        <div class="row" style="align-items:end">
+          <div style="min-width:140px"><label>年級</label><select id="q_grade"><option value="">全部年級</option><option>1年級</option><option>2年級</option><option>4年級</option><option>5年級</option><option>6年級</option></select></div>
+          <div style="min-width:220px"><label>項目</label><select id="q_event"><option value="">全部有預賽的項目</option></select></div>
+          <div><button class="btn" id="q_run" type="button">載入晉級名單</button></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" id="q_showRec" style="width:auto"> 下方表格與匯出的 Excel 顯示預賽名次與成績（內部參考用，公告文字不會包含）</label>
+        <div id="q_result" style="margin-top:12px"></div>
+        <div id="q_msgBox" style="display:none;margin-top:12px">
+          <label>公告文字（可直接修改）</label>
+          <textarea id="q_msg" rows="14"></textarea>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="q_copy" type="button">📋 複製文字</button>
+            <a class="btn ghost" id="q_line" target="_blank" rel="noopener">分享到 LINE</a>
+            <button class="btn ghost" id="q_pub" type="button">發布為網站公告</button>
+            <button class="btn ghost" id="q_xlsx" type="button">⬇ 匯出 Excel</button>
+          </div>
+          <div id="q_pubTip" class="muted" style="font-size:13px;margin-top:6px"></div>
+        </div>
+      </section>
+    </div>
+
     <!-- 帳號管理 -->
     <div class="func-panel" id="userWrap" style="display:none">
       <section class="card">
@@ -366,7 +393,7 @@
       if (hasPerm(AUTH, "行事曆")) loadSchedule();
       if (AUTH.role === "admin") loadUsers();
     }
-    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理", unreg: "報名管理", rec: "成績" };
+    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理", unreg: "報名管理", rec: "成績", qual: "成績" };
 
     // 新增/刪除類動作若結果在 Google 轉址那段遺失（ApiLostResponse），後端可能其實做完了：
     // 不自動重送（會重複新增），改成重新載入清單讓使用者看實際狀態。
@@ -866,6 +893,107 @@
       } catch (e) { handleWriteErr(e, loadAnn); el("u_pubTip").textContent = "結果不確定，請到「發布公告」確認是否已出現，避免重複發布。"; }
       finally { setBusy(b, false); }
     }
+
+    /* ---- 決賽晉級名單（公告／匯出） ---- */
+    let Q_GROUPS = [];   // [{ev, title, rows:[{班級,座號,姓名,預賽名次,預賽成績}]}]
+    const qHasPre = e => prelimQuota(e) > 0 || String(e["預賽"] || "").trim() === "是";
+    const qTitle = e => e["名稱"] + " " + e["組別"] + (e["性別"] && e["性別"] !== "混合" ? " " + e["性別"] : "");
+    function qFillEvents() {
+      const g = el("q_grade").value, cur = el("q_event").value;
+      el("q_event").innerHTML = '<option value="">全部有預賽的項目</option>' + EVENTS.filter(e => qHasPre(e) && (!g || e["組別"] === g))
+        .map(e => `<option value="${esc(e["代碼"])}">${esc(qTitle(e))}</option>`).join("");
+      if (cur) el("q_event").value = cur;
+    }
+    async function qRun() {
+      const b = el("q_run"); setBusy(b, true, "載入中…");
+      el("q_result").innerHTML = '<p class="muted">讀取預賽資料中…</p>';
+      try {
+        if (!EVENTS.length) await loadEvents();
+        if (el("q_event").options.length <= 1) qFillEvents();
+        const [pd, rd] = await Promise.all([apiGet("prelim", { token: AUTH.token }), apiGet("reglist")]);
+        const seat = {}; rd.regs.forEach(r => { seat[r["項目代碼"] + "|" + normalizeClassName(r["班級"]) + "|" + String(r["姓名"]).trim()] = r["座號"]; });
+        const g = el("q_grade").value, code = el("q_event").value;
+        const evs = EVENTS.filter(e => qHasPre(e) && (!g || e["組別"] === g) && (!code || e["代碼"] === code));
+        Q_GROUPS = evs.map(function (e) {
+          const team = isTeamEvent(e);
+          const rows = (pd.rows || []).filter(r => r["項目代碼"] === e["代碼"] && String(r["晉級"]).trim() === "是").map(r => ({
+            班級: r["班級"], 姓名: team ? "" : r["姓名"], 座號: team ? "" : (seat[e["代碼"] + "|" + normalizeClassName(r["班級"]) + "|" + String(r["姓名"]).trim()] || ""),
+            預賽名次: r["預賽名次"] || "", 預賽成績: r["預賽成績"] || "" }));
+          rows.sort((a, b) => normalizeClassName(a.班級).localeCompare(normalizeClassName(b.班級), "zh", { numeric: true }) || (Number(a.座號) || 0) - (Number(b.座號) || 0));
+          return { ev: e, title: qTitle(e), team, rows };
+        });
+        qRender();
+      } catch (e) { el("q_result").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+      finally { setBusy(b, false); }
+    }
+    function qRender(keepMsg) {
+      const show = el("q_showRec").checked, done = Q_GROUPS.filter(x => x.rows.length), todo = Q_GROUPS.filter(x => !x.rows.length);
+      if (!Q_GROUPS.length) { el("q_result").innerHTML = '<div class="notice">沒有符合條件的預賽項目。</div>'; el("q_msgBox").style.display = "none"; return; }
+      el("q_result").innerHTML = `<div class="notice">共 ${Q_GROUPS.length} 個有預賽的項目：已產生晉級名單 <b>${done.length}</b> 項${todo.length ? `；還沒有預賽結果 ${todo.length} 項（${todo.map(x => esc(x.title)).join("、")}）` : ""}。</div>` +
+        done.map(x => {
+          const rows = show ? x.rows.slice().sort((a, b) => (Number(a.預賽名次) || 99) - (Number(b.預賽名次) || 99)) : x.rows;
+          return `<details open style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">🏁 ${esc(x.title)}（${x.rows.length} ${x.team ? "班" : "人"}）</summary>
+          <div class="table-wrap"><table><thead><tr>${show ? "<th>預賽名次</th>" : ""}<th>班級</th>${x.team ? "" : "<th>座號</th><th>姓名</th>"}${show ? "<th>預賽成績</th>" : ""}</tr></thead><tbody>
+          ${rows.map(r => `<tr>${show ? `<td>${esc(r.預賽名次)}</td>` : ""}<td>${esc(r.班級)}</td>${x.team ? "" : `<td>${esc(r.座號)}</td><td>${esc(r.姓名)}</td>`}${show ? `<td>${esc(r.預賽成績)}</td>` : ""}</tr>`).join("")}</tbody></table></div></details>`;
+        }).join("");
+      if (!done.length) { el("q_msgBox").style.display = "none"; return; }
+      if (keepMsg) return;   // 只切換表格顯示，不要蓋掉使用者改過的公告文字
+      const now = new Date(), stamp = (now.getMonth() + 1) + "/" + now.getDate() + " " + String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+      const site = location.href.replace(/[^/]*$/, "");
+      el("q_msg").value = `【${CONFIG.eventTitle || "校慶運動會"}】決賽晉級名單\n（${stamp} 整理）\n\n` +
+        done.map(x => `▍${x.title}（${x.rows.length}${x.team ? "班" : "人"}）\n` + (x.team ? x.rows.map(r => r.班級).join("、") : x.rows.map(r => r.班級 + " " + r.姓名).join("\n"))).join("\n\n") +
+        `\n\n恭喜以上選手晉級決賽！決賽時間請見賽事行事曆：\n${site}schedule.html`;
+      el("q_msgBox").style.display = "block";
+      el("q_pub").style.display = hasPerm(AUTH, "公告") ? "" : "none";
+      el("q_pubTip").textContent = ""; qLineLink();
+    }
+    function qLineLink() { el("q_line").href = "https://line.me/R/share?text=" + encodeURIComponent(el("q_msg").value); }
+    async function qCopy() {
+      const t = el("q_msg").value;
+      try { await navigator.clipboard.writeText(t); toast("已複製，請到 LINE 群組貼上", "ok"); }
+      catch (e) { el("q_msg").select(); document.execCommand("copy"); toast("已複製（若沒有成功，請手動全選複製）", "ok"); }
+    }
+    async function qPublish() {
+      const body = el("q_msg").value.trim(); if (!body) return;
+      if (!confirm("確定把這份晉級名單發布成網站首頁公告？")) return;
+      const lines = body.split("\n");
+      const b = el("q_pub"); setBusy(b, true, "發布中…");
+      try {
+        await apiPost("addAnnouncement", { token: AUTH.token, 日期: todayLocal(), 標題: lines[0].replace(/^【[^】]*】/, "") || "決賽晉級名單", 內容: lines.slice(1).join("\n").trim(), 置頂: "", 附件: "" });
+        el("q_pubTip").textContent = "✅ 已發布為網站公告（可到「發布公告」修改或刪除）。"; toast("已發布公告", "ok");
+        loadAnn();
+      } catch (e) { handleWriteErr(e, loadAnn); el("q_pubTip").textContent = "結果不確定，請到「發布公告」確認是否已出現，避免重複發布。"; }
+      finally { setBusy(b, false); }
+    }
+    function qExcel() {
+      const show = el("q_showRec").checked, done = Q_GROUPS.filter(x => x.rows.length);
+      if (!done.length) return toast("沒有可匯出的晉級名單", "err");
+      const head = ["項目", "組別", "性別"].concat(show ? ["預賽名次"] : [], ["班級", "座號", "姓名"], show ? ["預賽成績"] : []);
+      const line = (x, r) => [x.ev["名稱"], x.ev["組別"], x.ev["性別"]].concat(show ? [Number(r.預賽名次) || r.預賽名次] : [], [r.班級, Number(r.座號) || r.座號, r.姓名 || (x.team ? "（全班）" : "")], show ? [r.預賽成績] : []);
+      const wb = XLSX.utils.book_new();
+      const all = XLSX.utils.aoa_to_sheet([head].concat(done.flatMap(x => x.rows.map(r => line(x, r)))));
+      all["!cols"] = head.map(h => ({ wch: h === "項目" ? 12 : 10 }));
+      XLSX.utils.book_append_sheet(wb, all, "全部晉級名單");
+      const used = {};
+      done.forEach(function (x) {
+        let nm = (x.ev["名稱"] + "_" + x.ev["組別"].replace("年級", "") + (x.ev["性別"] === "混合" ? "" : x.ev["性別"])).slice(0, 28), k = 2;
+        while (used[nm]) nm = nm.slice(0, 26) + "_" + k++;
+        used[nm] = true;
+        const ws = XLSX.utils.aoa_to_sheet([[x.title + " 決賽晉級名單"], [], head].concat(x.rows.map(r => line(x, r))));
+        ws["!cols"] = head.map(() => ({ wch: 11 }));
+        XLSX.utils.book_append_sheet(wb, ws, nm);
+      });
+      XLSX.writeFile(wb, "決賽晉級名單_" + todayLocal().replace(/-/g, "") + ".xlsx");
+      toast("已匯出 Excel", "ok");
+    }
+    el("q_grade").addEventListener("change", qFillEvents);
+    el("q_run").addEventListener("click", qRun);
+    el("q_showRec").addEventListener("change", () => { if (Q_GROUPS.length) qRender(true); });
+    el("q_msg").addEventListener("input", qLineLink);
+    el("q_copy").addEventListener("click", qCopy);
+    el("q_pub").addEventListener("click", qPublish);
+    el("q_xlsx").addEventListener("click", qExcel);
+    el("funcSelect").addEventListener("change", function () { if (this.value === "qual") { if (EVENTS.length) qFillEvents(); else loadEvents().then(qFillEvents); } });
 
     /* ---- 成績紀錄表（紙本，給記錄員現場填寫） ---- */
     const REC_ORDER = ["60公尺", "100公尺", "200公尺", "跳遠", "跳高", "壘球擲遠", "400公尺接力"];
