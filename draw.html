@@ -56,7 +56,7 @@
   <script src="js/layout.js?v=20261109e"></script>
   <script>
     const AUTH_KEY = "yc_auth", COLORS = ["藍", "綠", "黃", "紅", "橘", "白"];
-    let AUTH = null, INFO = { classCount: {}, lanes: 4, layout: {} }, ROWS = [], BUSY = false;
+    let AUTH = null, INFO = { classCount: {}, lanes: 4, layout: {} }, ROWS = [], BUSY = false, SHOW_LOGIN = false;
     try { AUTH = JSON.parse(localStorage.getItem(AUTH_KEY)); } catch (e) { AUTH = null; }
     if (isStaleAuth(AUTH)) AUTH = null;
 
@@ -102,6 +102,12 @@
       const body = el("drawBody");
       if (!AUTH || !AUTH.token) {
         if (el("dl_email")) return;   // 每 15 秒會重畫，登入表單已在畫面上就不要蓋掉（避免打到一半被清空）
+        // 全部抽完後老師不用再登入；只留一個小連結給管理者（需要重抽時登入）
+        if (!todo.length && nClass() && !SHOW_LOGIN) {
+          body.innerHTML = '<p class="muted" style="margin:0">這個年級已經全部抽完了，不用再登入。　<a href="#" id="dl_show">管理者登入（需要重抽時）</a></p>';
+          el("dl_show").addEventListener("click", function (e) { e.preventDefault(); SHOW_LOGIN = true; render(); });
+          return;
+        }
         body.innerHTML = `<p class="muted" style="margin:0 0 8px">請用班級帳號登入（例如 1年1班＝yocps101）。</p>
           <div class="row" style="align-items:end">
             <div style="min-width:160px"><label>帳號</label><input id="dl_email" autocomplete="username"></div>
@@ -118,10 +124,13 @@
         el("dl_pw").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
         return;
       }
-      if (!hasPerm(AUTH, "報名")) { body.innerHTML = '<div class="notice">這個帳號沒有抽籤權限。</div>'; return; }
-      if (!todo.length) { body.innerHTML = '<p class="muted">這個年級已經全部抽完了。</p>'; return; }
+      // 顯示目前登入的帳號＋登出（登錯帳號時可以換）
+      const who = `<p class="muted" style="margin:0 0 8px;font-size:13px">目前登入：<b>${esc(AUTH.name || AUTH.email || "")}</b>　<a href="#" id="dl_out">登出／換帳號</a></p>`;
+      const bindOut = () => el("dl_out").addEventListener("click", function (e) { e.preventDefault(); localStorage.removeItem(AUTH_KEY); AUTH = null; SHOW_LOGIN = false; el("drawBody").innerHTML = ""; render(); });
+      if (!hasPerm(AUTH, "報名")) { body.innerHTML = who + '<div class="notice">這個帳號沒有抽籤權限。</div>'; bindOut(); return; }
+      if (!todo.length) { body.innerHTML = who + '<p class="muted">這個年級已經全部抽完了。</p>'; bindOut(); return; }
       const keep = el("pickCls") ? el("pickCls").value : "", keepRes = el("result") ? el("result").innerHTML : "";
-      body.innerHTML = `<div class="row" style="align-items:end">
+      body.innerHTML = who + `<div class="row" style="align-items:end">
           <div style="min-width:180px"><label>請選擇你的班級</label><select id="pickCls"><option value="">請選擇</option>${todo.map(c => `<option>${esc(c)}</option>`).join("")}</select></div>
           <div><button class="btn" id="goDraw" type="button">🎲 抽籤</button></div></div><div id="result"></div>`;
       if (keep && todo.indexOf(keep) >= 0) el("pickCls").value = keep;
@@ -130,7 +139,7 @@
         if (mine && todo.indexOf(mine) >= 0 && grade() === m[1] + "年級") el("pickCls").value = mine;
       }
       el("result").innerHTML = keepRes;
-      el("goDraw").addEventListener("click", doDraw);
+      el("goDraw").addEventListener("click", doDraw); bindOut();
     }
     function renderAdmin(dm) {
       const ok = AUTH && hasPerm(AUTH, "秩序冊"); el("adminCard").style.display = ok ? "" : "none"; if (!ok) return;
@@ -170,7 +179,10 @@
     el("grade").addEventListener("change", render);
     el("refresh").addEventListener("click", load);
     load();
-    setInterval(() => { if (!document.hidden && !BUSY) load(); }, 15000);
+    // 每 15 秒更新；全部抽完後改成 2 分鐘一次（結果不會再變，少打 API）
+    let lastLoad = Date.now();
+    const allDone = () => { const n = nClass(); return n > 0 && Object.keys(drawnMap()).length >= n; };
+    setInterval(() => { if (document.hidden || BUSY) return; if (Date.now() - lastLoad < (allDone() ? 120000 : 15000) - 500) return; lastLoad = Date.now(); load(); }, 5000);
 
     function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   </script>
