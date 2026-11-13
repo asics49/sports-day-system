@@ -457,7 +457,7 @@
       if (hasPerm(AUTH, "行事曆")) loadSchedule();
       if (AUTH.role === "admin") loadUsers();
     }
-    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理", unreg: "報名管理", rec: "成績", qual: "成績", award: "成績", total: "成績" };
+    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理", unreg: "催繳通知", rec: "紀錄表", qual: "晉級名單", award: "獎狀", total: "總錦標" };
 
     // 新增/刪除類動作若結果在 Google 轉址那段遺失（ApiLostResponse），後端可能其實做完了：
     // 不自動重送（會重複新增），改成重新載入清單讓使用者看實際狀態。
@@ -644,9 +644,13 @@
     /* ---- 帳號管理 ---- */
     let USER_LIST = [], EDIT_USER_EMAIL = "";
     // 和後端 PERMS 一致；預設＝老師原本的範圍
-    const ALL_PERMS = ["報名", "成績", "公告", "行事曆", "秩序冊", "報名管理"];
+    const ALL_PERMS = ["報名", "成績", "公告", "行事曆", "秩序冊", "報名管理", "催繳通知", "紀錄表", "晉級名單", "獎狀", "總錦標"];
     const DEFAULT_PERMS = ["報名", "成績"];
-    el("u_perms").innerHTML = ALL_PERMS.map(p => `<label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="u_perm" value="${p}" style="width:auto">${p}</label>`).join("");
+    // 勾選框旁的說明（對應管理頁「選擇功能」或其他頁面）
+    const PERM_TIP = { 報名: "線上報名、道次抽籤", 成績: "成績輸入頁", 公告: "發布公告", 行事曆: "賽事行事曆管理", 秩序冊: "秩序冊產生、抽籤重抽",
+      報名管理: "報名管理", 催繳通知: "未報名班級", 紀錄表: "成績紀錄表", 晉級名單: "決賽晉級名單",
+      獎狀: "獎狀名單與套印", 總錦標: "團體總錦標積分表" };
+    el("u_perms").innerHTML = ALL_PERMS.map(p => `<label style="display:flex;align-items:center;gap:6px;margin:0" title="${esc(PERM_TIP[p] || "")}"><input type="checkbox" class="u_perm" value="${p}" style="width:auto">${p}<span class="muted" style="font-weight:400;font-size:12px">${PERM_TIP[p] && PERM_TIP[p] !== p ? "（" + esc(PERM_TIP[p]) + "）" : ""}</span></label>`).join("");
     function setPermBoxes(list) { document.querySelectorAll(".u_perm").forEach(c => c.checked = list.indexOf(c.value) >= 0); }
     function syncPermBoxesToRole() {
       const isAdmin = el("u_role").value === "admin";
