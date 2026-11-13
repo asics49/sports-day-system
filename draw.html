@@ -3,45 +3,61 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>道次抽籤 · 右昌國小運動會</title>
+  <title>道次分配 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261109e">
+  <link rel="stylesheet" href="css/style.css?v=20261113a">
   <style>
-    .draw-grid { width: 100%; border-collapse: collapse; text-align: center; }
-    .draw-grid th, .draw-grid td { border: 1px solid var(--line); padding: 12px 6px; font-size: clamp(15px, 2vw, 20px); }
-    .draw-grid th { background: #fff4d6; }
+    .gbtns { display: flex; flex-wrap: wrap; gap: 6px; }
+    .gbtns button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+    .gbtns button.on { background: var(--gold); border-color: var(--gold); color: #fff; }
+    .lane-block { margin-top: 18px; }
+    .lane-block h3 { margin: 0 0 8px; color: var(--gold-d); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .lane-block h3 small { font-weight: 400; color: var(--muted); font-size: 13px; }
+    .draw-grid { width: 100%; border-collapse: collapse; text-align: center; table-layout: fixed; }
+    .draw-grid th, .draw-grid td { border: 1px solid var(--line); padding: 10px 4px; font-size: clamp(14px, 2vw, 19px); }
+    .draw-grid thead th { background: #fff4d6; }
+    .draw-grid thead th .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; border: 1px solid rgba(0,0,0,.15); }
+    .draw-grid tbody th { background: #fffaf0; width: 24%; }
+    .draw-grid tbody th small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
     .draw-grid td.has { font-weight: 800; background: #fffdf5; }
     .draw-grid td.empty { color: #bbb; }
-    .draw-grid td.off { background: repeating-linear-gradient(45deg, #f3f3f3, #f3f3f3 6px, #e9e9e9 6px, #e9e9e9 12px); color: #999; font-size: 14px; }
+    .draw-grid td.off { background: repeating-linear-gradient(45deg, #f3f3f3, #f3f3f3 6px, #e9e9e9 6px, #e9e9e9 12px); color: #999; font-size: 13px; }
+    .draw-grid td.me { background: #ffe082; outline: 3px solid var(--red, #d33); outline-offset: -3px; }
+    .find-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 12px; }
+    .find-msg { margin-top: 8px; font-size: 15px; }
     .draw-big { text-align: center; padding: 22px 10px; border: 2px dashed var(--gold-d); border-radius: 14px; background: #fffaf0; margin-top: 14px; }
     .draw-big .n { font-size: clamp(30px, 6vw, 56px); font-weight: 900; color: var(--gold-d); letter-spacing: 2px; }
     .draw-big .t { color: var(--muted); margin-top: 4px; }
     .todo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
     .todo-chips span { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-size: 14px; }
+    @media print { .site-header, .site-nav, .site-footer, .no-print { display: none !important; } .lane-block { break-inside: avoid; } }
   </style>
 </head>
 <body data-page="draw">
   <main>
     <section class="card">
-      <h2>🎲 道次抽籤</h2>
-      <p class="muted">每班由老師登入後自己抽一次，系統會隨機決定「第幾組、第幾道」，不會重複，抽到的結果立刻顯示在下方表格，也會自動帶進秩序冊。每班只能抽一次，抽完不能重抽，抽之前請確認班級。</p>
-      <div class="row" style="align-items:end">
-        <div style="min-width:160px"><label>年級</label><select id="grade"></select></div>
-        <div><button class="btn ghost" id="refresh" type="button">重新整理</button></div>
-        <span class="muted" id="sub" style="font-size:13px"></span>
+      <h2>🏁 道次分配表</h2>
+      <p class="muted">115 學年度各年級大隊接力與短跑項目的<b>組別與道次</b>（1～4 道：藍、綠、黃、紅）。同一年級的所有接力、短跑項目都依照這份分配表排道次。</p>
+      <div class="gbtns no-print" id="gbtns"></div>
+      <div class="find-row no-print">
+        <div style="min-width:180px"><label>找我的班級</label><input id="findCls" placeholder="例：601 或 6年1班"></div>
+        <div><button class="btn" id="findGo" type="button">查詢</button></div>
+        <div><button class="btn ghost" type="button" onclick="print()">🖨 列印</button></div>
       </div>
-      <div id="board" style="margin-top:14px"><p class="muted">載入中…</p></div>
-      <div id="todo" style="margin-top:12px"></div>
+      <div id="findMsg" class="find-msg"></div>
+      <div id="board"><p class="muted">載入中…</p></div>
     </section>
 
-    <section class="card" id="drawCard">
-      <h2>我要抽籤</h2>
-      <div id="drawBody"></div>
+    <section class="card no-print" id="drawCard" style="display:none">
+      <h2>🎲 <span id="drawTitle">線上抽籤</span></h2>
+      <p class="muted" id="drawIntro">每班由老師登入後自己抽一次，系統會隨機決定「第幾組、第幾道」，不會重複，也會自動帶進秩序冊。每班只能抽一次，抽之前請確認班級。</p>
+      <div id="todo"></div>
+      <div id="drawBody" style="margin-top:10px"></div>
     </section>
 
-    <section class="card" id="adminCard" style="display:none">
-      <h2>管理（需要「秩序冊」權限）</h2>
+    <section class="card no-print" id="adminCard" style="display:none">
+      <h2>抽籤管理（需要「秩序冊」權限）</h2>
       <p class="muted">抽錯或需要重抽時，可以清除某一班的結果（該班再抽一次），或整個年級全部清掉重來。</p>
       <div class="row" style="align-items:end">
         <div style="min-width:160px"><label>清除某一班</label><select id="resetCls"></select></div>
@@ -51,64 +67,120 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261109e"></script>
-  <script src="js/api.js?v=20261109e"></script>
-  <script src="js/layout.js?v=20261109e"></script>
+  <script src="js/config.js?v=20261113a"></script>
+  <script src="js/api.js?v=20261113a"></script>
+  <script src="js/layout.js?v=20261113a"></script>
   <script>
     const AUTH_KEY = "yc_auth", COLORS = ["藍", "綠", "黃", "紅", "橘", "白"];
+    const DOT = ["#2f6fd6", "#2e9d4d", "#f2c230", "#d9363e", "#f08a24", "#ffffff"];
+    const ALL_GRADES = ["1年級", "2年級", "3年級", "4年級", "5年級", "6年級"];
+    const LD = CONFIG.laneDraws || {};
     let AUTH = null, INFO = { classCount: {}, lanes: 4, layout: {} }, ROWS = [], BUSY = false, SHOW_LOGIN = false;
+    let VIEW = "ALL", ME = "";   // 目前顯示的年級（ALL＝全部）、要標亮的班級
     try { AUTH = JSON.parse(localStorage.getItem(AUTH_KEY)); } catch (e) { AUTH = null; }
     if (isStaleAuth(AUTH)) AUTH = null;
+    try { VIEW = localStorage.getItem("yc_lane_view") || "ALL"; ME = localStorage.getItem("yc_lane_me") || ""; } catch (e) {}
+    const m0 = location.hash.match(/g=([1-6])/); if (m0) VIEW = m0[1] + "年級";
 
-    const grade = () => el("grade").value;
-    const nClass = () => (INFO.classCount || {})[grade()] || 0;
+    /* ---- 線上抽籤的年級（後端 DRAW_CLASS_COUNT，目前只有 1 年級）---- */
+    const DG = () => Object.keys(INFO.classCount || {})[0] || "";
+    const nClass = g => (INFO.classCount || {})[g] || 0;
     // 每組用幾道（只用第 1～k 道）；後端有給就用後端的，否則平均分配、前面的組多一班（10 班 → 4,3,3）
-    const layoutOf = () => {
-      const L = (INFO.layout || {})[grade()]; if (L && L.length) return L;
-      const n = nClass(), groups = Math.ceil(n / INFO.lanes);
-      return Array.from({ length: groups }, (_, g) => Math.floor(n / groups) + (g < n % groups ? 1 : 0));
+    const layoutOf = g => {
+      const L = (INFO.layout || {})[g]; if (L && L.length) return L;
+      const n = nClass(g), groups = Math.ceil(n / INFO.lanes);
+      return Array.from({ length: groups }, (_, i) => Math.floor(n / groups) + (i < n % groups ? 1 : 0));
     };
-    const clsName = i => grade().charAt(0) + "年" + i + "班";
-    const drawnMap = () => { const m = {}; ROWS.filter(r => r["年級"] === grade()).forEach(r => { m[normalizeClassName(r["班級"])] = r; }); return m; };
+    const clsName = (g, i) => g.charAt(0) + "年" + i + "班";
+    const drawnMap = g => { const m = {}; ROWS.filter(r => r["年級"] === g).forEach(r => { m[normalizeClassName(r["班級"])] = r; }); return m; };
+
+    // 某年級的分配表：{ rows: [[班級或""]...], off: [[是否不使用]...], source, done, total }
+    function gridOf(g) {
+      const lanes = (LD.lanes || [1, 2, 3, 4]).length;
+      if (nClass(g)) {   // 線上抽籤年級：用即時結果
+        const L = layoutOf(g), dm = drawnMap(g), rows = L.map(() => Array(lanes).fill("")), off = L.map(k => Array.from({ length: lanes }, (_, i) => i + 1 > k));
+        Object.keys(dm).forEach(c => { const r = dm[c]; if (rows[r["組"] - 1]) rows[r["組"] - 1][r["道次"] - 1] = c; });
+        return { rows, off, source: "online", done: Object.keys(dm).length, total: nClass(g) };
+      }
+      const d = LD[g]; if (!d) return null;
+      const rows = d.map(row => Array.from({ length: lanes }, (_, i) => row[i] ? clsName(g, row[i]) : ""));
+      return { rows, off: rows.map(r => r.map(() => false)), source: "table", done: rows.flat().filter(Boolean).length, total: rows.flat().filter(Boolean).length };
+    }
+    const gradesShown = () => ALL_GRADES.filter(g => nClass(g) || LD[g]);
 
     async function load() {
       try {
         const d = await apiGet("draw");
         INFO = { classCount: d.classCount || {}, lanes: d.lanes || 4, layout: d.layout || {} }; ROWS = d.rows || [];
-        const sel = el("grade"), cur = sel.value;
-        if (!sel.options.length) sel.innerHTML = Object.keys(INFO.classCount).map(g => `<option>${esc(g)}</option>`).join("");
-        if (cur) sel.value = cur;
-        render();
-      } catch (e) { el("board").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+      } catch (e) { toast("讀取線上抽籤結果失敗：" + e.message, "err"); }
+      render();
     }
 
     function render() {
-      const g = grade(), n = nClass(), lanes = INFO.lanes, layout = layoutOf(), groups = layout.length, dm = drawnMap();
-      if (!g) { el("board").innerHTML = '<div class="notice">目前沒有開放線上抽籤的年級。</div>'; return; }
-      const cell = {}; Object.keys(dm).forEach(c => { cell[dm[c]["組"] + "-" + dm[c]["道次"]] = c; });
-      let html = '<table class="draw-grid"><thead><tr><th>組別＼道次</th>' + Array.from({ length: lanes }, (_, i) => `<th>${i + 1} 道（${COLORS[i]}）</th>`).join("") + "</tr></thead><tbody>";
-      for (let r = 1; r <= groups; r++) {
-        html += `<tr><th>第 ${r} 組（${layout[r - 1]} 班）</th>` + Array.from({ length: lanes }, (_, l) => { const c = cell[r + "-" + (l + 1)]; return c ? `<td class="has">${esc(c)}</td>` : l + 1 > layout[r - 1] ? '<td class="off">不使用</td>' : '<td class="empty">—</td>'; }).join("") + "</tr>";
-      }
-      el("board").innerHTML = html + "</tbody></table>" + (layout.some(k => k < lanes) ? `<p class="muted" style="font-size:13px;margin:6px 0 0">分組規則：${layout.map((k, i) => `第 ${i + 1} 組 ${k} 班${k < lanes ? `（只用第 1～${k} 道）` : ""}`).join("、")}。</p>` : "");
-      const done = Object.keys(dm).length, todo = [];
-      for (let i = 1; i <= n; i++) if (!dm[clsName(i)]) todo.push(clsName(i));
-      el("sub").textContent = `${g}共 ${n} 班，已抽 ${done} 班，還剩 ${n - done} 班`;
-      el("todo").innerHTML = todo.length ? `<div class="muted" style="font-size:13px">還沒抽的班級：</div><div class="todo-chips">${todo.map(c => `<span>${esc(c)}</span>`).join("")}</div>` : '<div class="notice">✅ 全部班級都抽完了！秩序冊的道次分配表會自動使用這份結果。</div>';
-      renderDrawBody(todo); renderAdmin(dm);
+      const gs = gradesShown();
+      if (VIEW !== "ALL" && gs.indexOf(VIEW) < 0) VIEW = "ALL";
+      el("gbtns").innerHTML = ["ALL"].concat(gs).map(g => `<button type="button" data-g="${g}" class="${g === VIEW ? "on" : ""}">${g === "ALL" ? "全部年級" : g}</button>`).join("");
+      const lanes = LD.lanes || [1, 2, 3, 4], colors = LD.colors || [];
+      el("board").innerHTML = (VIEW === "ALL" ? gs : [VIEW]).map(function (g) {
+        const G = gridOf(g); if (!G) return "";
+        const note = G.source === "online" ? (G.done < G.total ? `線上抽籤中：已抽 ${G.done} / ${G.total} 班` : "線上抽籤結果") : "";
+        return `<div class="lane-block"><h3>${esc(g)} <small>共 ${G.total} 班${note ? "　" + esc(note) : ""}</small></h3>
+          <table class="draw-grid"><thead><tr><th>組別＼道次</th>${lanes.map((n, i) => `<th>${n} 道<br><span class="dot" style="background:${DOT[i]}"></span>${esc(colors[i] || COLORS[i])}</th>`).join("")}</tr></thead><tbody>
+          ${G.rows.map((row, r) => `<tr><th>第${cnNum(r + 1)}組<small>（${G.source === "online" ? G.off[r].filter(x => !x).length : row.filter(Boolean).length} 班）</small></th>${row.map((c, i) =>
+            c ? `<td class="has${c === ME ? " me" : ""}">${esc(c)}</td>` : G.off[r][i] ? '<td class="off">不使用</td>' : `<td class="empty">${G.source === "online" ? "—" : "空道"}</td>`).join("")}</tr>`).join("")}
+          </tbody></table></div>`;
+      }).join("") || '<div class="notice">目前沒有道次分配資料。</div>';
+      renderFindMsg();
+      renderDraw();
+    }
+    function cnNum(n) { return "零一二三四五六七八九十"[n] || String(n); }
+
+    /* ---- 找我的班級 ---- */
+    function findClass() {
+      const raw = el("findCls").value.trim();
+      ME = raw ? normalizeClassName(raw) : "";
+      try { localStorage.setItem("yc_lane_me", ME); } catch (e) {}
+      const g = ME ? ME.charAt(0) + "年級" : "";
+      if (ME && gradesShown().indexOf(g) >= 0) { VIEW = g; saveView(); }
+      render();
+      const cell = document.querySelector(".draw-grid td.me"); if (cell) cell.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    function renderFindMsg() {
+      if (!ME) { el("findMsg").innerHTML = ""; return; }
+      const g = ME.charAt(0) + "年級", G = gridOf(g);
+      let hit = null;
+      if (G) G.rows.forEach((row, r) => row.forEach((c, i) => { if (c === ME) hit = { r, i }; }));
+      const lanes = LD.lanes || [1, 2, 3, 4], colors = LD.colors || [];
+      el("findMsg").innerHTML = hit
+        ? `<div class="notice">📍 <b>${esc(ME)}</b>：第${cnNum(hit.r + 1)}組　第 ${lanes[hit.i]} 道（${esc(colors[hit.i] || COLORS[hit.i])}）</div>`
+        : `<div class="notice">找不到「${esc(ME)}」${G && G.source === "online" && G.done < G.total ? "（這個班可能還沒抽籤）" : "，請確認班級寫法，例如 601 或 6年1班"}。</div>`;
+    }
+    function saveView() { try { localStorage.setItem("yc_lane_view", VIEW); } catch (e) {} }
+
+    /* ---- 線上抽籤（只有開放抽籤的年級；全部抽完後只留管理者連結）---- */
+    function renderDraw() {
+      const g = DG(), card = el("drawCard");
+      if (!g) { card.style.display = "none"; el("adminCard").style.display = "none"; return; }
+      const dm = drawnMap(g), todo = [];
+      for (let i = 1; i <= nClass(g); i++) if (!dm[clsName(g, i)]) todo.push(clsName(g, i));
+      const isAdmin = AUTH && hasPerm(AUTH, "秩序冊");
+      card.style.display = "";
+      el("drawTitle").textContent = g + " 線上抽籤";
+      el("drawIntro").style.display = todo.length ? "" : "none";
+      el("todo").innerHTML = todo.length ? `<div class="muted" style="font-size:13px">還沒抽的班級（${todo.length} 班）：</div><div class="todo-chips">${todo.map(c => `<span>${esc(c)}</span>`).join("")}</div>` : `<p class="muted" style="margin:0">✅ ${esc(g)} 全部班級都抽完了，結果已放在上方分配表，秩序冊也會自動採用。</p>`;
+      renderDrawBody(g, todo); renderAdmin(dm, isAdmin);
     }
 
-    function renderDrawBody(todo) {
+    function renderDrawBody(g, todo) {
       const body = el("drawBody");
       if (!AUTH || !AUTH.token) {
-        if (el("dl_email")) return;   // 每 15 秒會重畫，登入表單已在畫面上就不要蓋掉（避免打到一半被清空）
-        // 全部抽完後老師不用再登入；只留一個小連結給管理者（需要重抽時登入）
-        if (!todo.length && nClass() && !SHOW_LOGIN) {
-          body.innerHTML = '<p class="muted" style="margin:0">這個年級已經全部抽完了，不用再登入。　<a href="#" id="dl_show">管理者登入（需要重抽時）</a></p>';
+        if (el("dl_email")) return;   // 定時重畫時不要蓋掉打到一半的登入表單
+        if (!todo.length && !SHOW_LOGIN) {
+          body.innerHTML = '<p class="muted" style="margin:0;font-size:13px"><a href="#" id="dl_show">管理者登入（需要重抽時）</a></p>';
           el("dl_show").addEventListener("click", function (e) { e.preventDefault(); SHOW_LOGIN = true; render(); });
           return;
         }
-        body.innerHTML = `<p class="muted" style="margin:0 0 8px">請用班級帳號登入（例如 1年1班＝yocps101）。</p>
+        body.innerHTML = `<p class="muted" style="margin:0 0 8px">${todo.length ? "請用班級帳號登入（例如 1年1班＝yocps101）。" : "管理者登入："}</p>
           <div class="row" style="align-items:end">
             <div style="min-width:160px"><label>帳號</label><input id="dl_email" autocomplete="username"></div>
             <div style="min-width:160px"><label>密碼</label><input id="dl_pw" type="password" autocomplete="current-password"></div>
@@ -124,11 +196,10 @@
         el("dl_pw").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
         return;
       }
-      // 顯示目前登入的帳號＋登出（登錯帳號時可以換）
       const who = `<p class="muted" style="margin:0 0 8px;font-size:13px">目前登入：<b>${esc(AUTH.name || AUTH.email || "")}</b>　<a href="#" id="dl_out">登出／換帳號</a></p>`;
       const bindOut = () => el("dl_out").addEventListener("click", function (e) { e.preventDefault(); localStorage.removeItem(AUTH_KEY); AUTH = null; SHOW_LOGIN = false; el("drawBody").innerHTML = ""; render(); });
+      if (!todo.length) { body.innerHTML = who; bindOut(); return; }
       if (!hasPerm(AUTH, "報名")) { body.innerHTML = who + '<div class="notice">這個帳號沒有抽籤權限。</div>'; bindOut(); return; }
-      if (!todo.length) { body.innerHTML = who + '<p class="muted">這個年級已經全部抽完了。</p>'; bindOut(); return; }
       const keep = el("pickCls") ? el("pickCls").value : "", keepRes = el("result") ? el("result").innerHTML : "";
       body.innerHTML = who + `<div class="row" style="align-items:end">
           <div style="min-width:180px"><label>請選擇你的班級</label><select id="pickCls"><option value="">請選擇</option>${todo.map(c => `<option>${esc(c)}</option>`).join("")}</select></div>
@@ -136,26 +207,26 @@
       if (keep && todo.indexOf(keep) >= 0) el("pickCls").value = keep;
       else {   // 班級帳號 yocps1NN → 自動選好 1年N班
         const m = String(AUTH.email || "").match(/^yocps(\d)(\d\d)$/i), mine = m ? m[1] + "年" + Number(m[2]) + "班" : "";
-        if (mine && todo.indexOf(mine) >= 0 && grade() === m[1] + "年級") el("pickCls").value = mine;
+        if (mine && todo.indexOf(mine) >= 0) el("pickCls").value = mine;
       }
       el("result").innerHTML = keepRes;
       el("goDraw").addEventListener("click", doDraw); bindOut();
     }
-    function renderAdmin(dm) {
-      const ok = AUTH && hasPerm(AUTH, "秩序冊"); el("adminCard").style.display = ok ? "" : "none"; if (!ok) return;
+    function renderAdmin(dm, ok) {
+      el("adminCard").style.display = ok ? "" : "none"; if (!ok) return;
       el("resetCls").innerHTML = '<option value="">請選擇</option>' + Object.keys(dm).sort((a, b) => a.localeCompare(b, "zh", { numeric: true })).map(c => `<option>${esc(c)}</option>`).join("");
     }
 
     async function doDraw() {
       if (BUSY) return;
-      const cls = el("pickCls").value;
+      const g = DG(), cls = el("pickCls").value, L = layoutOf(g);
       if (!cls) return toast("請先選擇班級", "err");
       if (!confirm("確定要幫「" + cls + "」抽籤嗎？每班只能抽一次，抽完不能重抽。")) return;
       BUSY = true; const btn = el("goDraw"); setBusy(btn, true, "抽籤中…");
       const box = el("result"); let tick = 0;
-      const anim = setInterval(() => { box.innerHTML = `<div class="draw-big"><div class="n">第 ${1 + (tick % layoutOf().length)} 組　第 ${1 + (tick * 7 % layoutOf()[tick % layoutOf().length])} 道</div><div class="t">${esc(cls)} 抽籤中…</div></div>`; tick++; }, 90);
+      const anim = setInterval(() => { box.innerHTML = `<div class="draw-big"><div class="n">第 ${1 + (tick % L.length)} 組　第 ${1 + (tick * 7 % L[tick % L.length])} 道</div><div class="t">${esc(cls)} 抽籤中…</div></div>`; tick++; }, 90);
       try {
-        const [res] = await Promise.all([apiPost("drawLane", { token: AUTH.token, grade: grade(), cls }), new Promise(r => setTimeout(r, 1500))]);
+        const [res] = await Promise.all([apiPost("drawLane", { token: AUTH.token, grade: g, cls }), new Promise(r => setTimeout(r, 1500))]);
         clearInterval(anim);
         box.innerHTML = `<div class="draw-big"><div class="t">${esc(res.班級)}${res.already ? "（之前已經抽過）" : " 抽到了"}</div><div class="n">第 ${res.組} 組　第 ${res.道次} 道（${COLORS[res.道次 - 1] || ""}）</div></div>`;
         toast(res.msg, "ok");
@@ -169,19 +240,22 @@
     }
 
     async function doReset(cls) {
-      const what = cls ? "「" + cls + "」" : "整個 " + grade();
+      const g = DG(), what = cls ? "「" + cls + "」" : "整個 " + g;
       if (!confirm("確定要清除" + what + "的抽籤結果嗎？")) return;
-      try { const res = await apiPost("resetDraw", { token: AUTH.token, grade: grade(), cls }); toast(res.msg, "ok"); await load(); }
+      try { const res = await apiPost("resetDraw", { token: AUTH.token, grade: g, cls }); toast(res.msg, "ok"); await load(); }
       catch (e) { toast(e.message, "err"); }
     }
     el("resetOne").addEventListener("click", () => { const c = el("resetCls").value; if (!c) return toast("請先選擇要清除的班級", "err"); doReset(c); });
     el("resetAll").addEventListener("click", () => doReset(""));
-    el("grade").addEventListener("change", render);
-    el("refresh").addEventListener("click", load);
+    el("gbtns").addEventListener("click", function (e) { const b = e.target.closest("button[data-g]"); if (!b) return; VIEW = b.dataset.g; saveView(); render(); });
+    el("findGo").addEventListener("click", findClass);
+    el("findCls").addEventListener("keydown", e => { if (e.key === "Enter") findClass(); });
+    if (ME) el("findCls").value = ME;
+    render();   // 先用設定檔的 2～6 年級畫出來，線上抽籤結果讀到再補
     load();
-    // 每 15 秒更新；全部抽完後改成 2 分鐘一次（結果不會再變，少打 API）
+    // 還在抽籤時每 15 秒更新；全部抽完後 2 分鐘一次
     let lastLoad = Date.now();
-    const allDone = () => { const n = nClass(); return n > 0 && Object.keys(drawnMap()).length >= n; };
+    const allDone = () => { const g = DG(); return !g || Object.keys(drawnMap(g)).length >= nClass(g); };
     setInterval(() => { if (document.hidden || BUSY) return; if (Date.now() - lastLoad < (allDone() ? 120000 : 15000) - 500) return; lastLoad = Date.now(); load(); }, 5000);
 
     function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}

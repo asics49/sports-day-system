@@ -6,7 +6,7 @@
   <title>賽事行事曆 · 右昌國小運動會</title>
   <link rel="icon" href="assets/banner-small.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261109e">
+  <link rel="stylesheet" href="css/style.css?v=20261113a">
   <style>
     /* 工具列 */
     .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -88,10 +88,10 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=20261109e"></script>
-  <script src="js/api.js?v=20261109e"></script>
-  <script src="js/layout.js?v=20261109e"></script>
-  <script src="js/sched.js?v=20261109e"></script>
+  <script src="js/config.js?v=20261113a"></script>
+  <script src="js/api.js?v=20261113a"></script>
+  <script src="js/layout.js?v=20261113a"></script>
+  <script src="js/sched.js?v=20261113a"></script>
   <script>
     const WD = SCHED_WD, TYPES = SCHED_TYPES, gradeLabel = schedGradeLabel;
     function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
@@ -149,7 +149,13 @@
           <span class="gbadge">${esc(gradeLabel(r))}</span>${isNext ? '<span class="tag next">下一場</span>' : past ? '<span class="tag done">已結束</span>' : ""}</div>
         <div class="ev-meta">${r["時間"] ? `<span>🕗 ${esc(r["時間"])}</span>` : ""}${r["地點"] ? `<span>📍 ${esc(r["地點"])}</span>` : ""}
           ${r["檢錄時間"] ? `<span>📣 檢錄 ${esc(r["檢錄時間"])}</span>` : ""}</div>
-        ${r["備註"] ? `<div class="ev-note">💬 ${esc(r["備註"])}</div>` : ""}</div>`;
+        ${r["備註"] ? `<div class="ev-note">💬 ${esc(r["備註"])}</div>` : ""}${laneLink(r)}</div>`;
+    }
+    // 接力與短跑項目：連到道次分配表（單一年級就直接開那個年級）
+    function laneLink(r) {
+      if (!/接力|\d+\s*(m|公尺)/.test(String(r["項目"]))) return "";
+      const g = r._g && r._g.length === 1 ? "#g=" + r._g[0] : "";
+      return `<div class="ev-note"><a href="draw.html${g}">🏁 看道次分配表 →</a></div>`;
     }
     function renderList(list, nx) {
       let html = "", month = -1;
