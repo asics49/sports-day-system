@@ -96,6 +96,8 @@
         <option value="rec">成績紀錄表（紙本）</option>
         <option value="unreg">未報名班級（催繳通知）</option>
         <option value="qual">決賽晉級名單（公告／匯出）</option>
+        <option value="award">獎狀名單與套印（獎品組）</option>
+        <option value="total">團體總錦標積分表（紀錄組）</option>
         <option value="user">帳號管理</option>
       </select>
       <div id="noPermMsg" class="notice" style="display:none;margin-top:8px">此帳號沒有任何管理功能的權限。報名請到「<a href="register.html">線上報名</a>」、成績輸入請到「<a href="score.html">成績輸入</a>」；需要其他權限請洽管理者。</div>
@@ -302,6 +304,66 @@
       </section>
     </div>
 
+    <!-- 獎狀名單與套印（獎品組） -->
+    <div class="func-panel" id="awardWrap" style="display:none">
+      <section class="card">
+        <h2>獎狀名單與套印</h2>
+        <p class="muted">依「成績」分頁已公布的決賽名次，列出各單項得獎選手。可<b>下載 Excel 合併列印檔</b>（Word 合併列印用），或<b>直接線上套印</b>：只印出年級、姓名、受獎事由、日期，放進印好的空白獎狀紙列印。</p>
+        <label>年級（可複選，都不勾＝全部年級）</label>
+        <div id="aw_grades" style="display:flex;flex-wrap:wrap;gap:6px 16px"></div>
+        <div class="grid2" style="margin-top:8px">
+          <div><label>頒發名次</label><select id="aw_top"><option value="3">前 3 名</option><option value="6" selected>前 6 名</option><option value="8">前 8 名</option></select></div>
+          <div><label>獎狀日期</label><input id="aw_date" type="date"></div>
+        </div>
+        <label style="margin-top:8px">受獎事由（可修改；換行用 Enter）<span class="muted" style="font-weight:400">　可用：{活動} {年級} {性別組} {項目} {名次} {紀錄} {班級}</span></label>
+        <textarea id="aw_tpl" rows="2"></textarea>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" id="aw_relayEach" style="width:auto"> 400公尺接力依報名名單每位隊員各一張（不勾＝每班一張，姓名寫「全班同學」）</label>
+        <div style="margin-top:10px"><button class="btn" id="aw_run" type="button">載入得獎名單</button></div>
+        <div id="aw_result" style="margin-top:12px"></div>
+        <div id="aw_actions" style="display:none;margin-top:12px">
+          <div class="row">
+            <button class="btn" id="aw_xlsx" type="button">⬇ 下載 Excel 合併列印檔</button>
+            <button class="btn" id="aw_print" type="button">🖨 線上套印（已勾選的）</button>
+            <button class="btn ghost" id="aw_test" type="button">列印測試頁（1 張）</button>
+          </div>
+          <details style="margin-top:12px">
+            <summary style="cursor:pointer;font-weight:700">⚙ 套印位置調整（第一次請先印測試頁對位）</summary>
+            <p class="muted" style="font-size:13px">設定只存在這台電腦。印出來的字整體偏右就把「左右」改成負數、偏下就把「上下」改成負數（單位：公釐）。列印時紙張選 A4、縮放選「實際大小／100%」，並取消「頁首和頁尾」。</p>
+            <div class="grid2">
+              <div><label>左右位移（mm，正數往右）</label><input id="aw_dx" type="number" step="0.5"></div>
+              <div><label>上下位移（mm，正數往下）</label><input id="aw_dy" type="number" step="0.5"></div>
+            </div>
+            <div class="grid2">
+              <div><label>字型大小（年級／姓名，pt）</label><input id="aw_fs" type="number" step="1" min="10" max="40"></div>
+              <div><label>字型大小（受獎事由，pt）</label><input id="aw_fs2" type="number" step="1" min="8" max="36"></div>
+            </div>
+            <label>獎狀底圖（選填，只用在這台電腦預覽／用白紙印整張，不會上傳）</label>
+            <input id="aw_bg" type="file" accept="image/*">
+            <label style="display:flex;align-items:center;gap:6px;margin-top:6px"><input type="checkbox" id="aw_bgPrint" style="width:auto"> 列印時連底圖一起印（用白紙印整張獎狀；放進已印好的獎狀紙時不要勾）</label>
+            <div class="row" style="margin-top:8px"><button class="btn ghost" id="aw_reset" type="button">位置還原預設</button></div>
+          </details>
+        </div>
+      </section>
+    </div>
+
+    <!-- 團體總錦標積分表（紀錄組） -->
+    <div class="func-panel" id="totalWrap" style="display:none">
+      <section class="card">
+        <h2>團體總錦標積分表</h2>
+        <p class="muted">依「成績」分頁的決賽得分（第 1～6 名依序 7／5／4／3／2／1 分），算出 4～6 年級各班各項目積分（男、女分列；混合項目合併一格，同班兩人得分寫成「7+5」），加總後排出團體總錦標名次。預賽成績不計分。</p>
+        <div class="grid2">
+          <div><label>年級</label><select id="t_grade"><option value="ALL">4～6 年級（每個年級一張）</option><option>4年級</option><option>5年級</option><option>6年級</option></select></div>
+          <div><label>計分項目</label><div id="t_events" style="display:flex;flex-wrap:wrap;gap:4px 14px"></div></div>
+        </div>
+        <div style="margin-top:10px" class="row">
+          <button class="btn" id="t_run" type="button">產生積分表</button>
+          <button class="btn ghost" id="t_print" type="button" style="display:none">🖨 列印</button>
+          <button class="btn ghost" id="t_xlsx" type="button" style="display:none">⬇ 匯出 Excel</button>
+        </div>
+        <div id="t_result" style="margin-top:12px"></div>
+      </section>
+    </div>
+
     <!-- 帳號管理 -->
     <div class="func-panel" id="userWrap" style="display:none">
       <section class="card">
@@ -395,7 +457,7 @@
       if (hasPerm(AUTH, "行事曆")) loadSchedule();
       if (AUTH.role === "admin") loadUsers();
     }
-    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理", unreg: "報名管理", rec: "成績", qual: "成績" };
+    const FUNC_PERM = { ann: "公告", schedule: "行事曆", program: "秩序冊", reg: "報名管理", unreg: "報名管理", rec: "成績", qual: "成績", award: "成績", total: "成績" };
 
     // 新增/刪除類動作若結果在 Google 轉址那段遺失（ApiLostResponse），後端可能其實做完了：
     // 不自動重送（會重複新增），改成重新載入清單讓使用者看實際狀態。
@@ -1002,6 +1064,282 @@
     el("q_pub").addEventListener("click", qPublish);
     el("q_xlsx").addEventListener("click", qExcel);
     el("funcSelect").addEventListener("change", function () { if (this.value === "qual") { if (EVENTS.length) qFillEvents(); else loadEvents().then(qFillEvents); } });
+
+    /* ---- 獎狀名單與套印（獎品組） ---- */
+    function cnNum(n) {
+      n = Number(n); const d = "零一二三四五六七八九";
+      if (!(n >= 0) || n >= 100) return String(n);
+      if (n < 10) return d[n];
+      return (n >= 20 ? d[Math.floor(n / 10)] : "") + "十" + (n % 10 ? d[n % 10] : "");
+    }
+    const classCn = c => { const m = normalizeClassName(c).match(/^(\d+)年(\d+)班$/); return m ? cnNum(m[1]) + "年" + cnNum(m[2]) + "班" : String(c || ""); };
+    const gradeCn = g => { const m = String(g).match(/(\d+)/); return m ? cnNum(m[1]) + "年級" : String(g || ""); };
+    const rankCn = r => "第" + cnNum(r) + "名";
+    const genderGroup = s => s === "男" ? "男生組" : s === "女" ? "女生組" : "";
+    const AW_DEF_TPL = "榮獲{活動}\n{年級}{性別組} {項目} {名次}";
+    const AW_DEF_CFG = { dx: 0, dy: 0, fs: 22, fs2: 17 };
+    // 套印位置（公釐，A4 直式），依「獎狀套印格式.pdf」量出；文字垂直置中在 y
+    const AW_POS = { g: [65, 94.3], n: [65, 111.8], rs: [82, 129.2], y: [88.5, 252.2], m: [123, 252.2], d: [155, 252.2] };
+    let AW_ROWS = [], AW_BG = "";
+    function awStore(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+    function awCfg() { let c = {}; try { c = JSON.parse(awStore("yc_cert_cfg")) || {}; } catch (e) {} return Object.assign({}, AW_DEF_CFG, c); }
+    function awCfgToForm() { const c = awCfg(); el("aw_dx").value = c.dx; el("aw_dy").value = c.dy; el("aw_fs").value = c.fs; el("aw_fs2").value = c.fs2; }
+    function awSaveCfg() {
+      awStore("yc_cert_cfg", JSON.stringify({ dx: Number(el("aw_dx").value) || 0, dy: Number(el("aw_dy").value) || 0,
+        fs: Number(el("aw_fs").value) || AW_DEF_CFG.fs, fs2: Number(el("aw_fs2").value) || AW_DEF_CFG.fs2 }));
+    }
+    function awInit() {
+      if (el("aw_grades").innerHTML) return;
+      el("aw_grades").innerHTML = ["1年級", "2年級", "4年級", "5年級", "6年級"].map(g => `<label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" class="aw_g" value="${g}" style="width:auto">${g}</label>`).join("");
+      el("aw_date").value = todayLocal();
+      el("aw_tpl").value = awStore("yc_cert_tpl") || AW_DEF_TPL;
+      AW_BG = awStore("yc_cert_bg") || "";
+      awCfgToForm();
+    }
+    const awDate = () => { const p = (el("aw_date").value || todayLocal()).split("-"); return { y: Number(p[0]) - 1911, m: Number(p[1]), d: Number(p[2]) }; };
+    function awReason(x) {
+      return el("aw_tpl").value.replace(/\{(\w+|[一-鿿]+)\}/g, function (all, k) {
+        return ({ 活動: String(CONFIG.eventTitle || "").replace(/\s+/g, ""), 年級: gradeCn(x.ev["組別"]), 性別組: genderGroup(x.ev["性別"]), 項目: x.ev["名稱"],
+          名次: rankCn(x.rank), 紀錄: x.rec || "", 班級: classCn(x.cls) })[k] ?? all;
+      }).replace(/[ \t]+/g, " ").trim();
+    }
+    async function awRun() {
+      const b = el("aw_run"); setBusy(b, true, "載入中…");
+      el("aw_result").innerHTML = '<p class="muted">讀取成績中…</p>';
+      try {
+        awStore("yc_cert_tpl", el("aw_tpl").value);
+        if (!EVENTS.length) await loadEvents();
+        const each = el("aw_relayEach").checked;
+        const [qd, rd] = await Promise.all([apiGet("query"), each ? apiGet("reglist") : Promise.resolve({ regs: [] })]);
+        const gs = Array.from(document.querySelectorAll(".aw_g:checked")).map(c => c.value);
+        const top = Number(el("aw_top").value) || 6;
+        const evIdx = {}; EVENTS.forEach((e, i) => { evIdx[e["代碼"]] = i; });
+        AW_ROWS = [];
+        (qd.results || []).forEach(function (r) {
+          const i = evIdx[r["項目代碼"]]; if (i === undefined) return;
+          const ev = EVENTS[i], rank = Number(r["名次"]);
+          if (!(rank >= 1 && rank <= top)) return;            // 名次空白（棄權／請假）也會被濾掉
+          if (gs.length && gs.indexOf(ev["組別"]) < 0) return;
+          const cls = normalizeClassName(r["班級"]), base = { ev, evi: i, rank, cls, rec: String(r["紀錄"] || "") };
+          const nm = String(r["姓名"] || "").trim();
+          if (isTeamEvent(ev) && !nm) {
+            const mem = each ? rd.regs.filter(x => x["項目代碼"] === ev["代碼"] && normalizeClassName(x["班級"]) === cls) : [];
+            if (mem.length) mem.sort((a, b) => (Number(a["座號"]) || 0) - (Number(b["座號"]) || 0)).forEach(x => AW_ROWS.push(Object.assign({}, base, { name: String(x["姓名"]).trim(), seat: x["座號"] })));
+            else AW_ROWS.push(Object.assign({}, base, { name: "全班同學", seat: "" }));
+          } else AW_ROWS.push(Object.assign({}, base, { name: nm, seat: "" }));
+        });
+        AW_ROWS.sort((a, b) => a.evi - b.evi || a.rank - b.rank || a.cls.localeCompare(b.cls, "zh", { numeric: true }));
+        awRender();
+      } catch (e) { el("aw_result").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+      finally { setBusy(b, false); }
+    }
+    function awRender() {
+      if (!AW_ROWS.length) { el("aw_result").innerHTML = '<div class="notice">沒有符合條件的得獎名單（項目可能還沒公布決賽成績）。</div>'; el("aw_actions").style.display = "none"; return; }
+      const groups = []; AW_ROWS.forEach((x, i) => { const g = groups[groups.length - 1]; if (g && g.evi === x.evi) g.idx.push(i); else groups.push({ evi: x.evi, ev: x.ev, idx: [i] }); });
+      el("aw_result").innerHTML = `<div class="notice">共 <b>${groups.length}</b> 個項目、<b>${AW_ROWS.length}</b> 張獎狀。可取消勾選不要印的；下載 Excel 與線上套印都只用<b>已勾選</b>的（目前 <b id="aw_selN">${AW_ROWS.length}</b> 張）。
+        <a href="javascript:void(0)" id="aw_all" style="margin-left:8px">全選</a> <a href="javascript:void(0)" id="aw_none" style="margin-left:6px">全不選</a></div>` +
+        groups.map((g, gi) => `<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700"><input type="checkbox" class="aw_grp" data-g="${gi}" checked style="width:auto;vertical-align:middle" onclick="event.stopPropagation()"> 🏅 ${esc(qTitle(g.ev))}（${g.idx.length} 張）</summary>
+          <div class="table-wrap"><table><thead><tr><th></th><th>名次</th><th>班級</th><th>姓名</th><th>紀錄</th><th>受獎事由</th></tr></thead><tbody>
+          ${g.idx.map(i => { const x = AW_ROWS[i]; return `<tr><td><input type="checkbox" class="aw_c" data-i="${i}" data-g="${gi}" checked style="width:auto"></td><td>${x.rank}</td><td>${esc(x.cls)}</td><td>${esc(x.name)}</td><td>${esc(x.rec)}</td><td style="white-space:pre-line;font-size:13px">${esc(awReason(x))}</td></tr>`; }).join("")}
+          </tbody></table></div></details>`).join("");
+      el("aw_actions").style.display = "block";
+      el("aw_all").onclick = () => { document.querySelectorAll(".aw_c,.aw_grp").forEach(c => { c.checked = true; }); awCount(); };
+      el("aw_none").onclick = () => { document.querySelectorAll(".aw_c,.aw_grp").forEach(c => { c.checked = false; }); awCount(); };
+    }
+    function awCount() { const n = el("aw_selN"); if (n) n.textContent = awSelected().length; }
+    const awSelected = () => Array.from(document.querySelectorAll(".aw_c:checked")).map(c => AW_ROWS[Number(c.dataset.i)]);
+    el("aw_result").addEventListener("change", function (ev) {
+      const t = ev.target;
+      if (t.classList.contains("aw_grp")) document.querySelectorAll(`.aw_c[data-g="${t.dataset.g}"]`).forEach(c => { c.checked = t.checked; });
+      awCount();
+    });
+    function awExcel() {
+      const rows = awSelected(); if (!rows.length) return toast("請至少勾選一張", "err");
+      awStore("yc_cert_tpl", el("aw_tpl").value);
+      const dt = awDate();
+      const head = ["年級", "姓名", "受獎事由", "受獎事由第1行", "受獎事由第2行", "班級", "座號", "項目", "組別", "性別", "名次", "名次中文", "紀錄", "民國年", "月", "日", "項目代碼"];
+      const data = rows.map(function (x) {
+        const rs = awReason(x), ln = rs.split("\n");
+        return [classCn(x.cls), x.name, ln.join(" "), ln[0] || "", ln.slice(1).join(" "), x.cls, Number(x.seat) || "", x.ev["名稱"], x.ev["組別"], x.ev["性別"], x.rank, rankCn(x.rank), x.rec, dt.y, dt.m, dt.d, x.ev["代碼"]];
+      });
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([head].concat(data));
+      ws["!cols"] = head.map(h => ({ wch: /受獎事由/.test(h) ? 36 : h === "年級" ? 12 : 9 }));
+      XLSX.utils.book_append_sheet(wb, ws, "獎狀名單");
+      const help = XLSX.utils.aoa_to_sheet([["Word 合併列印說明"], [],
+        ["1. Word 開新文件，版面設 A4 直式，把獎狀底圖放在文字後方（或直接用印好的獎狀紙）。"],
+        ["2. 郵件 → 選取收件者 → 使用現有清單 → 選這個 Excel 的「獎狀名單」工作表。"],
+        ["3. 在「年級：」「姓名：」「受獎事由：」後面插入合併欄位「年級」「姓名」「受獎事由」（兩行版可用「受獎事由第1行」「受獎事由第2行」）。"],
+        ["4. 日期處插入「民國年」「月」「日」。"],
+        ["5. 完成與合併 → 編輯個別文件 → 列印。"],
+        [], ["「年級」欄是國字班級（如 六年三班），「班級」欄是數字寫法（6年3班）。接力每班一張時姓名為「全班同學」，可直接在 Excel 修改。"]]);
+      help["!cols"] = [{ wch: 100 }];
+      XLSX.utils.book_append_sheet(wb, help, "說明");
+      XLSX.writeFile(wb, "獎狀合併列印_" + todayLocal().replace(/-/g, "") + ".xlsx");
+      toast("已下載 " + rows.length + " 筆", "ok");
+    }
+    function awPrint(test) {
+      const rows = test ? (awSelected().slice(0, 1).length ? awSelected().slice(0, 1) : [{ ev: { 組別: "6年級", 性別: "男", 名稱: "60公尺" }, rank: 1, cls: "6年12班", name: "王小明", rec: "" }]) : awSelected();
+      if (!rows.length) return toast("請至少勾選一張", "err");
+      awSaveCfg(); awStore("yc_cert_tpl", el("aw_tpl").value);
+      const c = awCfg(), dt = awDate(), bgPrint = el("aw_bgPrint").checked && AW_BG;
+      if (el("aw_bgPrint").checked && !AW_BG) toast("沒有選擇底圖，只會印文字", "err");
+      const at = (k, center) => `left:${AW_POS[k][0] + c.dx}mm;top:${AW_POS[k][1] + c.dy}mm;transform:translate(${center ? "-50%" : "0"},-50%)`;
+      const pages = rows.map(x => `<div class="pg"><div class="f" style="${at("g")};font-size:${c.fs}pt">${esc(classCn(x.cls))}</div>
+        <div class="f" style="${at("n")};font-size:${c.fs}pt">${esc(x.name)}</div>
+        <div class="f rs" style="left:${AW_POS.rs[0] + c.dx}mm;top:${AW_POS.rs[1] + c.dy}mm;font-size:${c.fs2}pt">${esc(awReason(x))}</div>
+        <div class="f" style="${at("y", 1)};font-size:${c.fs}pt">${dt.y}</div><div class="f" style="${at("m", 1)};font-size:${c.fs}pt">${dt.m}</div><div class="f" style="${at("d", 1)};font-size:${c.fs}pt">${dt.d}</div></div>`).join("");
+      const w = window.open("", "_blank");
+      if (!w) return toast("瀏覽器擋住了彈出視窗，請允許後再按一次", "err");
+      w.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>獎狀套印（${rows.length} 張）</title><style>
+        @page { size: A4 portrait; margin: 0; }
+        html, body { margin: 0; padding: 0; background: #888; }
+        .bar { position: sticky; top: 0; z-index: 9; background: #333; color: #fff; padding: 8px 12px; font: 15px "Microsoft JhengHei", sans-serif; }
+        .bar button { font-size: 16px; padding: 4px 16px; margin-right: 10px; }
+        .pg { position: relative; width: 210mm; height: 297mm; margin: 10px auto; background: #fff ${AW_BG ? "url(" + AW_BG + ") 0 0 / 210mm 297mm no-repeat" : ""}; overflow: hidden; break-after: page; page-break-after: always; }
+        .pg:last-child { break-after: auto; page-break-after: auto; }
+        .f { position: absolute; white-space: nowrap; color: #000; font-family: "DFKai-SB", "標楷體", "BiauKai", "KaiTi", "Noto Serif TC", serif; font-weight: bold; }
+        .rs { white-space: pre-line; width: 108mm; line-height: 1.5; transform: translateY(-0.75em); }
+        @media print { html, body { background: none; } .bar { display: none; } .pg { margin: 0; ${bgPrint ? "-webkit-print-color-adjust: exact; print-color-adjust: exact;" : "background: none !important;"} } }
+      </style></head><body><div class="bar"><button onclick="print()">🖨 列印</button>共 ${rows.length} 張${test ? "（測試頁）" : ""}。列印設定：A4、縮放 100%（實際大小）、取消「頁首和頁尾」${AW_BG ? (bgPrint ? "、勾選「背景圖形」" : "；畫面上的底圖只是預覽，不會印出") : ""}。</div>${pages}</body></html>`);
+      w.document.close();
+    }
+    awInit();
+    el("aw_run").addEventListener("click", awRun);
+    el("aw_xlsx").addEventListener("click", awExcel);
+    el("aw_print").addEventListener("click", () => awPrint(false));
+    el("aw_test").addEventListener("click", () => awPrint(true));
+    el("aw_tpl").addEventListener("input", () => { if (AW_ROWS.length) { const keep = {}; document.querySelectorAll(".aw_c").forEach(c => { keep[c.dataset.i] = c.checked; }); awRender(); document.querySelectorAll(".aw_c").forEach(c => { c.checked = keep[c.dataset.i] !== false; }); awCount(); } });
+    ["aw_dx", "aw_dy", "aw_fs", "aw_fs2"].forEach(id => el(id).addEventListener("change", awSaveCfg));
+    el("aw_reset").addEventListener("click", () => { awStore("yc_cert_cfg", "{}"); awCfgToForm(); toast("已還原預設位置", "ok"); });
+    el("aw_bg").addEventListener("change", function () {
+      const f = this.files && this.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => { AW_BG = rd.result; if (awStore("yc_cert_bg", AW_BG) === null && awStore("yc_cert_bg") !== AW_BG) toast("底圖太大，重新整理頁面後要再選一次", "err"); else toast("已載入底圖（存在這台電腦）", "ok"); };
+      rd.readAsDataURL(f);
+    });
+
+    /* ---- 團體總錦標積分表（紀錄組） ---- */
+    const T_ORDER = ["跳高", "跳遠", "壘球擲遠", "60公尺", "100公尺", "200公尺", "400公尺接力", "大隊接力", "體育班大隊接力"];
+    const T_GRADES = ["4年級", "5年級", "6年級"];
+    let T_DATA = [];
+    function tFillEvents() {
+      const prev = {}; document.querySelectorAll(".t_e").forEach(c => { prev[c.value] = c.checked; });
+      const names = [];
+      EVENTS.filter(e => T_GRADES.indexOf(e["組別"]) >= 0).forEach(e => { if (names.indexOf(e["名稱"]) < 0) names.push(e["名稱"]); });
+      names.sort((a, b) => ((T_ORDER.indexOf(a) + 1) || 99) - ((T_ORDER.indexOf(b) + 1) || 99));
+      el("t_events").innerHTML = names.map(n => `<label style="display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap;font-weight:400"><input type="checkbox" class="t_e" value="${esc(n)}" ${prev[n] === false ? "" : "checked"} style="width:auto">${esc(n)}</label>`).join("");
+    }
+    async function tRun() {
+      const b = el("t_run"); setBusy(b, true, "計算中…");
+      el("t_result").innerHTML = '<p class="muted">讀取成績中…</p>';
+      try {
+        if (!EVENTS.length) await loadEvents();
+        if (!document.querySelector(".t_e")) tFillEvents();
+        const d = await apiGet("query");
+        const names = Array.from(document.querySelectorAll(".t_e:checked")).map(c => c.value);
+        const grades = el("t_grade").value === "ALL" ? T_GRADES : [el("t_grade").value];
+        T_DATA = grades.map(function (g) {
+          const evs = EVENTS.filter(e => e["組別"] === g && names.indexOf(e["名稱"]) >= 0);
+          const colNames = []; evs.forEach(e => { if (colNames.indexOf(e["名稱"]) < 0) colNames.push(e["名稱"]); });
+          colNames.sort((a, b) => ((T_ORDER.indexOf(a) + 1) || 99) - ((T_ORDER.indexOf(b) + 1) || 99));
+          const cols = colNames.map(n => ({ name: n, mixed: evs.filter(e => e["名稱"] === n).every(e => e["性別"] !== "男" && e["性別"] !== "女") }));
+          const byCode = {}; evs.forEach(e => { byCode[e["代碼"]] = e; });
+          const rows = {}, gn = g.replace("年級", "");
+          const mk = c => rows[c] || (rows[c] = { cls: c, cells: {}, total: 0 });
+          for (let i = 1; i <= (CONFIG.classCount[g] || 12); i++) mk(gn + "年" + i + "班");
+          const done = {};
+          (d.results || []).forEach(function (r) {
+            const e = byCode[r["項目代碼"]]; if (!e) return;
+            done[e["代碼"]] = true;
+            const p = Number(r["得分"]) || 0; if (p <= 0) return;
+            const sex = e["性別"] === "男" || e["性別"] === "女" ? e["性別"] : "混合";
+            const row = mk(normalizeClassName(r["班級"])), k = e["名稱"] + "|" + sex;
+            (row.cells[k] = row.cells[k] || []).push(p); row.total += p;
+          });
+          const list = Object.values(rows).sort((a, b) => a.cls.localeCompare(b.cls, "zh", { numeric: true }));
+          list.forEach(r => { r.rank = 1 + list.filter(o => o.total > r.total).length; });
+          return { grade: g, cols, rows: list, done: Object.keys(done).length, all: evs.length,
+            pending: evs.filter(e => !done[e["代碼"]]).map(e => e["名稱"] + (e["性別"] === "混合" ? "" : e["性別"])) };
+        });
+        tRender();
+      } catch (e) { el("t_result").innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
+      finally { setBusy(b, false); }
+    }
+    const tCell = (row, name, sex) => (row.cells[name + "|" + sex] || []).slice().sort((a, b) => b - a).join("+");
+    const tClsNo = c => { const m = c.match(/年(\d+)班$/); return m ? m[1] : c; };
+    const tScoreNote = () => (CONFIG.scoreTable || []).map((p, i) => "第" + cnNum(i + 1) + "名 " + p).join("　");
+    function tTableHtml(G) {
+      const top = r => r.total > 0 && r.rank <= 3 ? ` class="t-top${r.rank}"` : "";
+      let h = `<table class="tt"><thead><tr><th colspan="2">${esc(gradeCn(G.grade))}班級</th>${G.cols.map(c => `<th>${esc(c.name)}</th>`).join("")}<th>總分</th><th>名次</th></tr></thead><tbody>`;
+      G.rows.forEach(function (r) {
+        h += `<tr><td rowspan="2" class="t-cls">${esc(tClsNo(r.cls))}</td><td>男</td>` +
+          G.cols.map(c => c.mixed ? `<td rowspan="2">${tCell(r, c.name, "混合")}</td>` : `<td>${tCell(r, c.name, "男")}</td>`).join("") +
+          `<td rowspan="2" class="t-sum">${r.total}</td><td rowspan="2"${top(r)}>${r.total > 0 ? r.rank : ""}</td></tr>` +
+          `<tr><td>女</td>${G.cols.filter(c => !c.mixed).map(c => `<td>${tCell(r, c.name, "女")}</td>`).join("")}</tr>`;
+      });
+      return h + `<tr><td colspan="${G.cols.length + 4}" class="t-note">${esc(tScoreNote())}</td></tr></tbody></table>`;
+    }
+    const T_CSS = `.tt{border-collapse:collapse;width:100%;font-size:15px} .tt th,.tt td{border:1px solid #333;padding:4px 6px;text-align:center;min-width:2.6em}
+      .tt th{background:#f3e3c0} .tt .t-cls,.tt .t-sum{font-weight:700} .tt .t-note{text-align:left;font-size:13px}
+      .tt .t-top1{background:#ffd54f;font-weight:700} .tt .t-top2{background:#e0e0e0;font-weight:700} .tt .t-top3{background:#f0c4a0;font-weight:700}`;
+    function tRender() {
+      if (!document.getElementById("t_css")) { const s = document.createElement("style"); s.id = "t_css"; s.textContent = T_CSS; document.head.appendChild(s); }
+      el("t_result").innerHTML = T_DATA.map(G => {
+        const lead = G.rows.filter(r => r.total > 0 && r.rank === 1).map(r => r.cls).join("、");
+        return `<h3 style="color:var(--gold-d);margin-top:16px">${esc(G.grade)} 田徑總錦標</h3>
+          <p class="muted" style="font-size:13px;margin:4px 0 8px">已公布 ${G.done} / ${G.all} 項${lead ? "；目前第一名：<b>" + esc(lead) + "</b>" : ""}${G.pending.length ? "<br>尚未有成績：" + esc(G.pending.join("、")) : ""}</p>
+          <div class="table-wrap">${tTableHtml(G)}</div>`;
+      }).join("");
+      el("t_print").style.display = el("t_xlsx").style.display = T_DATA.length ? "" : "none";
+    }
+    function tPrint() {
+      if (!T_DATA.length) return;
+      const w = window.open("", "_blank");
+      if (!w) return toast("瀏覽器擋住了彈出視窗，請允許後再按一次", "err");
+      const now = new Date(), stamp = now.getFullYear() - 1911 + "/" + (now.getMonth() + 1) + "/" + now.getDate() + " " + String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+      w.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>田徑總錦標積分表</title><style>
+        @page { size: A4 landscape; margin: 10mm; }
+        body { font-family: "Microsoft JhengHei", "Noto Sans TC", sans-serif; margin: 0; padding: 12px; color: #000; }
+        h1 { font-size: 20px; text-align: center; margin: 0 0 4px; } .sub { text-align: center; font-size: 13px; margin-bottom: 8px; }
+        .gp { break-after: page; page-break-after: always; } .gp:last-child { break-after: auto; page-break-after: auto; }
+        ${T_CSS} .tt { font-size: 14px; } .tt th, .tt td { padding: 2px 4px; }
+        .tt th, .tt td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        @media print { .noprint { display: none; } body { padding: 0; } }
+      </style></head><body><div class="noprint" style="margin-bottom:10px"><button onclick="print()" style="font-size:16px;padding:6px 16px">🖨 列印</button></div>
+      ${T_DATA.map(G => `<div class="gp"><h1>${esc(CONFIG.schoolName || "")} ${esc(CONFIG.eventTitle || "")}　${esc(gradeCn(G.grade))}田徑總錦標</h1>
+        <div class="sub">已公布 ${G.done} / ${G.all} 項　統計時間 ${stamp}</div>${tTableHtml(G)}</div>`).join("")}</body></html>`);
+      w.document.close();
+    }
+    function tExcel() {
+      if (!T_DATA.length) return;
+      const wb = XLSX.utils.book_new();
+      T_DATA.forEach(function (G) {
+        const n = G.cols.length, aoa = [[CONFIG.eventTitle + "　" + gradeCn(G.grade) + "田徑總錦標"], [gradeCn(G.grade) + "班級", ""].concat(G.cols.map(c => c.name), ["總分", "名次"])];
+        const merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: n + 3 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }];
+        const val = s => s === "" ? "" : (/^\d+$/.test(s) ? Number(s) : s);
+        G.rows.forEach(function (r) {
+          const y = aoa.length;
+          aoa.push([Number(tClsNo(r.cls)) || r.cls, "男"].concat(G.cols.map(c => val(tCell(r, c.name, c.mixed ? "混合" : "男"))), [r.total, r.total > 0 ? r.rank : ""]));
+          aoa.push(["", "女"].concat(G.cols.map(c => c.mixed ? "" : val(tCell(r, c.name, "女"))), ["", ""]));
+          merges.push({ s: { r: y, c: 0 }, e: { r: y + 1, c: 0 } }, { s: { r: y, c: n + 2 }, e: { r: y + 1, c: n + 2 } }, { s: { r: y, c: n + 3 }, e: { r: y + 1, c: n + 3 } });
+          G.cols.forEach((c, i) => { if (c.mixed) merges.push({ s: { r: y, c: i + 2 }, e: { r: y + 1, c: i + 2 } }); });
+        });
+        aoa.push([tScoreNote()]); merges.push({ s: { r: aoa.length - 1, c: 0 }, e: { r: aoa.length - 1, c: n + 3 } });
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws["!merges"] = merges;
+        ws["!cols"] = [{ wch: 6 }, { wch: 4 }].concat(G.cols.map(c => ({ wch: Math.max(7, c.name.length * 2) })), [{ wch: 6 }, { wch: 6 }]);
+        XLSX.utils.book_append_sheet(wb, ws, G.grade);
+      });
+      XLSX.writeFile(wb, "田徑總錦標_" + todayLocal().replace(/-/g, "") + ".xlsx");
+      toast("已匯出 Excel", "ok");
+    }
+    el("t_run").addEventListener("click", tRun);
+    el("t_print").addEventListener("click", tPrint);
+    el("t_xlsx").addEventListener("click", tExcel);
+    el("funcSelect").addEventListener("change", function () {
+      if (this.value === "total") { if (EVENTS.length) tFillEvents(); else loadEvents().then(tFillEvents); }
+    });
 
     /* ---- 成績紀錄表（紙本，給記錄員現場填寫） ---- */
     const REC_ORDER = ["60公尺", "100公尺", "200公尺", "跳遠", "跳高", "壘球擲遠", "400公尺接力"];
