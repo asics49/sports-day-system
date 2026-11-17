@@ -193,6 +193,15 @@
         if (!regData.regs.length) { box.innerHTML = '<div class="notice">查無此生的報名紀錄，請確認班級與座號／姓名是否正確。</div>'; return; }
         // 用報名資料裡的姓名精準過濾，避免把同班同學同項目的成績當成本人的；接力以班級為單位
         const myName = String(regData.regs[0]["姓名"] || "").trim(), myCls = cKey(regData.regs[0]["班級"] || cls);
+        // 本人的預賽成績（後端只回這位學生與該班接力隊的列；預賽成績不公開列表，只能查自己的）
+        const myPre = {};
+        try {
+          const pd = await apiGet("prelim", { cls: myCls, name: myName });
+          if (pd.personal) (pd.rows || []).forEach(function (p) {
+            const team = !String(p["姓名"] || "").trim();
+            if (team || String(p["姓名"]).trim() === myName) myPre[p["項目代碼"]] = p;
+          });
+        } catch (e) { /* 讀不到就不顯示預賽欄 */ }
         const done = {}, byCode = {};
         resData.results.forEach(function (r) {
           done[r["項目代碼"]] = true;
@@ -218,11 +227,22 @@
             狀態: `<span class="${badge}" style="font-weight:700">第 ${rk} 名</span>`,
             名次: rk, 紀錄: res["紀錄"] || "", 得分: res["得分"] };
         });
+        // 預賽欄：成績＋是否晉級；純數字補「秒」（有預賽的都是徑賽／接力）
+        const preCell = function (code) {
+          const p = myPre[code]; if (!p) return "";
+          let v = String(p["預賽成績"] == null ? "" : p["預賽成績"]).trim();
+          if (/^x$/i.test(v)) v = "未出賽";
+          else if (/^\d+(\.\d+)?$/.test(v)) v += " 秒";
+          const q = p["晉級"] === "是";
+          return `${esc(v || "—")}<br><span style="font-size:13px;font-weight:700;${q ? "color:var(--red,#c62828)" : "color:var(--muted)"}">${q ? "✅ 進入決賽" : "未進入決賽"}</span>`;
+        };
+        regData.regs.forEach((r, i) => { rows[i].pre = preCell(r["項目代碼"]); });
+        const hasPre = rows.some(r => r.pre);
         const doneN = rows.filter(r => r.名次 !== "" && r.名次 !== "晉級").length, qN = rows.filter(r => r.名次 === "晉級").length;
-        const trs = rows.map(r => `<tr><td>${esc(r.項目)}</td><td>${esc(r.類別)}</td><td>${r.狀態}</td><td>${esc(r.紀錄)}</td><td style="text-align:center">${esc(r.得分)}</td></tr>`).join("");
-        box.innerHTML = `<div class="notice">共報名 ${rows.length} 項，已公布成績 ${doneN} 項（含未達標、棄權、請假）${qN ? `，晉級決賽 ${qN} 項（等待決賽）` : ""}。</div>
-          <div class="table-wrap"><table><thead><tr><th>項目</th><th>類別</th><th>狀態</th><th>紀錄</th><th>得分</th></tr></thead>
-          <tbody>${trs}</tbody></table></div>`;
+        const trs = rows.map(r => `<tr><td>${esc(r.項目)}</td><td>${esc(r.類別)}</td>${hasPre ? `<td style="text-align:center">${r.pre}</td>` : ""}<td>${r.狀態}</td><td>${esc(r.紀錄)}</td><td style="text-align:center">${esc(r.得分)}</td></tr>`).join("");
+        box.innerHTML = `<div class="notice"><b>${esc(myCls)} ${esc(myName)}</b>：共報名 ${rows.length} 項，已公布成績 ${doneN} 項（含未達標、棄權、請假）${qN ? `，晉級決賽 ${qN} 項（等待決賽）` : ""}。</div>
+          <div class="table-wrap"><table><thead><tr><th>項目</th><th>類別</th>${hasPre ? "<th>預賽成績</th>" : ""}<th>${hasPre ? "決賽／" : ""}狀態</th><th>紀錄</th><th>得分</th></tr></thead>
+          <tbody>${trs}</tbody></table></div>${hasPre ? '<p class="muted" style="font-size:13px;margin-top:6px">預賽成績只提供本人查詢，不公開排名；決賽成績公布後才計算名次與積分。</p>' : ""}`;
       } catch (e) { box.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
     el("p_go").addEventListener("click", personalOverview);
