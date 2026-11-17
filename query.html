@@ -77,6 +77,13 @@
       (rows || []).forEach(r => { (m[r["項目代碼"]] || (m[r["項目代碼"]] = new Set())).add(sKey(r["班級"], r["姓名"])); });
       return m;
     }
+    // 預賽成績顯示：X＝未出賽；純數字補「秒」（有預賽的都是徑賽／接力）
+    function fmtPre(v) {
+      v = String(v == null ? "" : v).trim();
+      if (!v) return "";
+      if (/^x$/i.test(v)) return "未出賽";
+      return /^\d+(\.\d+)?$/.test(v) ? v + "秒" : v;
+    }
     function specialStatus(r) {   // 回傳「棄權」「請假」或 ""
       const t = String(r["紀錄"] || "").trim();
       return NOSHOW.indexOf(t) >= 0 ? t : "";
@@ -99,8 +106,12 @@
       try {
         const fGrade = el("grade").value, fCode = el("code").value,
               fCls = cKey(el("cls").value.trim()), fName = el("name").value.trim();
-        const [resD, regD, evD, preD] = await Promise.all([apiGet("query"), apiGet("reglist"), EVENTS.length ? { events: EVENTS } : apiGet("events"), apiGet("prelim").catch(() => ({ rows: [] }))]);
-        const qual = qualMap(preD.rows);
+        const [resD, regD, evD, preD] = await Promise.all([apiGet("query"), apiGet("reglist"), EVENTS.length ? { events: EVENTS } : apiGet("events"), apiGet("prelim", fCode ? { withScore: 1, code: fCode } : { withScore: 1 }).catch(() => ({ rows: [] }))]);
+        // 有預賽成績的版本（withScore）只算晉級者當晉級名單；舊版後端只回晉級者，也能用
+        const qual = qualMap((preD.rows || []).filter(r => !preD.withScore || r["晉級"] === "是"));
+        const preScore = {};   // 項目代碼|班級|姓名 → 預賽成績（接力姓名空白）
+        (preD.rows || []).forEach(r => { if (preD.withScore) preScore[r["項目代碼"] + "|" + sKey(r["班級"], r["姓名"])] = r["預賽成績"]; });
+        const preOf = (code, cls, who, relay) => fmtPre(preScore[code + "|" + sKey(cls, relay ? "" : who)]);
         EVENTS = evD.events;
         const results = resD.results, regs = regD.regs;
         const pass = r => (!fGrade || String(r["年級"]) === fGrade) && (!fCode || r["項目代碼"] == fCode) &&
@@ -111,7 +122,8 @@
         results.filter(pass).forEach(function (r) {
           const sp = specialStatus(r), rk = Number(r["名次"]);
           rows.push({ code: r["項目代碼"], name: r["項目名稱"], grp: r["組別"], cls: r["班級"], who: r["姓名"], seat: 0,
-            rank: sp || !rk ? 999 : rk, label: sp || (rk ? rk : "—"), rec: sp ? "" : (r["紀錄"] || ""), pts: r["得分"], css: rk && !sp && rk <= 3 ? "rank" + rk : "" });
+            rank: sp || !rk ? 999 : rk, label: sp || (rk ? rk : "—"), rec: sp ? "" : (r["紀錄"] || ""), pts: r["得分"], css: rk && !sp && rk <= 3 ? "rank" + rk : "",
+            pre: preOf(r["項目代碼"], r["班級"], r["姓名"], isRelayName(r["項目名稱"]) || !String(r["姓名"] || "").trim()) });
         });
         // 報名了、項目已公布成績、卻沒有名次紀錄的人 → 未達標
         const has = {}, hasClass = {};
@@ -130,7 +142,7 @@
               if (!qual[code].has(sKey(g["班級"], ""))) lab = "預賽未晉級";
               else if (!done[code]) { lab = "晉級決賽"; cs = "rank2"; }
             } else if (!done[code]) return;
-            rows.push({ code, name: g["項目名稱"], grp: ev["組別"] || g["年級"], cls: g["班級"], who: "（全班）", seat: 0, rank: 1000, label: lab, rec: "", pts: lab === "晉級決賽" ? "" : 0, css: cs });
+            rows.push({ code, name: g["項目名稱"], grp: ev["組別"] || g["年級"], cls: g["班級"], who: "（全班）", seat: 0, rank: lab === "預賽未晉級" ? 1001 : 1000, label: lab, rec: "", pts: lab === "晉級決賽" ? "" : 0, css: cs, pre: preOf(code, g["班級"], "", true) });
             return;
           }
           const key = sKey(g["班級"], g["姓名"]);
@@ -142,20 +154,34 @@
             if (!isQ) label = "預賽未晉級";
             else if (!done[code]) { label = "晉級決賽"; css = "rank2"; }
           }
-          rows.push({ code, name: g["項目名稱"], grp: ev["組別"] || g["年級"], cls: g["班級"], who: g["姓名"], seat: Number(g["座號"]) || 0, rank: 1000, label, rec: "", pts: label === "晉級決賽" ? "" : 0, css });
+          rows.push({ code, name: g["項目名稱"], grp: ev["組別"] || g["年級"], cls: g["班級"], who: g["姓名"], seat: Number(g["座號"]) || 0, rank: label === "預賽未晉級" ? 1001 : 1000, label, rec: "", pts: label === "晉級決賽" ? "" : 0, css, pre: preOf(code, g["班級"], g["姓名"], false) });
+        });
+        // 有預賽成績但報名資料對不到的人（姓名寫法不同、現場報名）也列出來
+        const listed = {}; rows.forEach(r => { listed[r.code + "|" + sKey(r.cls, r.who === "（全班）" ? "" : r.who)] = true; });
+        (preD.rows || []).forEach(function (p) {
+          if (!preD.withScore) return;
+          const code = p["項目代碼"], ev = EVENTS.find(e => e["代碼"] == code) || {};
+          if (!pass({ "年級": p["年級"] || ev["組別"], "項目代碼": code, "班級": p["班級"], "姓名": p["姓名"] })) return;
+          const k = code + "|" + sKey(p["班級"], p["姓名"]); if (listed[k]) return; listed[k] = true;
+          const q = p["晉級"] === "是", fin = done[code];
+          const label = !q ? "預賽未晉級" : fin ? "未達標" : "晉級決賽";
+          rows.push({ code, name: p["項目名稱"] || ev["名稱"], grp: ev["組別"] || p["年級"], cls: p["班級"], who: String(p["姓名"] || "").trim() || "（全班）", seat: 0,
+            rank: label === "預賽未晉級" ? 1001 : 1000, label, rec: "", pts: label === "晉級決賽" ? "" : 0, css: label === "晉級決賽" ? "rank2" : "muted", pre: fmtPre(p["預賽成績"]) });
         });
         if (!rows.length) { out.innerHTML = '<div class="notice">查無成績。</div>'; return; }
         const ord = c => { const i = EVENTS.findIndex(e => e["代碼"] == c); return i < 0 ? 999 : i; };
-        rows.sort((a, b) => ord(a.code) - ord(b.code) || a.rank - b.rank || normalizeClassName(a.cls).localeCompare(normalizeClassName(b.cls), "zh", { numeric: true }) || a.seat - b.seat);
+        const preNum = r => { const m = String(r.pre || "").match(/(\d+(?:\.\d+)?)/); return m ? Number(m[1]) : 9999; };   // 預賽都是計時項目，秒數小者在前
+        rows.sort((a, b) => ord(a.code) - ord(b.code) || a.rank - b.rank || (a.rank >= 1000 ? preNum(a) - preNum(b) : 0) || normalizeClassName(a.cls).localeCompare(normalizeClassName(b.cls), "zh", { numeric: true }) || a.seat - b.seat);
         const nOk = rows.filter(r => r.rank < 999).length, nNo = rows.filter(r => r.label === "未達標").length,
               nPre = rows.filter(r => r.label === "晉級決賽" || r.label === "預賽未晉級").length;
+        const hasPre = rows.some(r => r.pre);
         const body = rows.map(r => `<tr>
             <td>${esc(r.name)}</td><td>${esc(r.grp)}</td>
             <td class="${r.css}">${esc(r.label)}</td><td>${esc(r.cls)}</td>
-            <td>${esc(r.who)}</td><td>${esc(r.rec)}</td><td style="text-align:center">${esc(r.pts)}</td></tr>`).join("");
+            <td>${esc(r.who)}</td>${hasPre ? `<td>${esc(r.pre || "")}</td>` : ""}<td>${esc(r.rec)}</td><td style="text-align:center">${esc(r.pts)}</td></tr>`).join("");
         out.innerHTML = `<div class="notice">共 ${rows.length} 筆：有名次 ${nOk} 筆、未達標 ${nNo} 筆${nPre ? "、預賽晉級／未晉級 " + nPre + " 筆" : ""}${rows.length - nOk - nNo - nPre ? "、棄權／請假 " + (rows.length - nOk - nNo - nPre) + " 筆" : ""}。</div>
           <div class="table-wrap"><table>
-          <thead><tr><th>項目</th><th>組別</th><th>名次</th><th>班級</th><th>姓名</th><th>紀錄</th><th>得分</th></tr></thead>
+          <thead><tr><th>項目</th><th>組別</th><th>名次</th><th>班級</th><th>姓名</th>${hasPre ? "<th>預賽成績</th><th>決賽成績</th>" : "<th>紀錄</th>"}<th>得分</th></tr></thead>
           <tbody>${body}</tbody></table></div>`;
       } catch (e) { out.innerHTML = '<div class="error">' + esc(e.message) + '</div>'; }
     }
